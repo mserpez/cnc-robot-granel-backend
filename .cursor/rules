@@ -1,0 +1,5 @@
+- Conversar en español, mantener el código y nombres técnicos en inglés.
+- Limitarse a las tareas solicitadas; consultar antes de sugerir acciones adicionales.
+- Mantener definiciones y descripciones lo más concisas y puntuales posible.
+- Utilizar TypeScript de forma consistente en todo el código del backend.
+- Mantener separación estricta de responsabilidades: módulos por dominio, servicios con funciones internas, repositories para acceso a datos y Prisma como ORM.
