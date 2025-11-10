@@ -4,6 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { LoggingService } from './core/logging/logging.service';
+import { BullBoardService } from './core/queue/bull-board.service';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, {
@@ -16,6 +17,9 @@ async function bootstrap(): Promise<void> {
   app.useLogger(loggingService);
   app.use(helmet());
   app.enableShutdownHooks();
+
+  const bullBoardService = app.get<BullBoardService>(BullBoardService);
+  bullBoardService.mount(app);
 
   const configService = app.get<ConfigService>(ConfigService);
   const portValue = configService.get<string>('PORT');
