@@ -35,7 +35,7 @@ export class QueueService implements OnModuleDestroy {
 
     try {
       if (this.queues.has(name)) {
-        const existing = this.queues.get(name) as Queue;
+        const existing: Queue = this.queues.get(name) as Queue;
         this.loggingService.debug(
           `getQueue returning existing queue ${name}`,
           context,
@@ -43,7 +43,7 @@ export class QueueService implements OnModuleDestroy {
         return existing;
       }
 
-      const queue = this.createQueue(name, options);
+      const queue: Queue = this.createQueue(name, options);
       this.loggingService.debug(
         `getQueue returning new queue ${name}`,
         context,
@@ -76,7 +76,7 @@ export class QueueService implements OnModuleDestroy {
         ...options,
       };
 
-      const queue = new Queue(name, queueOptions);
+      const queue: Queue = new Queue(name, queueOptions);
       this.queues.set(name, queue);
 
       this.loggingService.debug(`createQueue returning queue ${name}`, context);
@@ -109,11 +109,11 @@ export class QueueService implements OnModuleDestroy {
         ...options,
       };
 
-      const worker = new Worker<DataType, ResultType, string>(
-        name,
-        processor,
-        workerOptions,
-      );
+      const worker: Worker<DataType, ResultType, string> = new Worker<
+        DataType,
+        ResultType,
+        string
+      >(name, processor, workerOptions);
       this.workers.add(worker);
 
       this.loggingService.debug(
@@ -138,7 +138,7 @@ export class QueueService implements OnModuleDestroy {
     this.loggingService.debug('Entering getRegisteredQueues', context);
 
     try {
-      const queues = Array.from(this.queues.values());
+      const queues: Queue[] = Array.from(this.queues.values());
       this.loggingService.debug(
         `getRegisteredQueues returning ${queues.length} queues`,
         context,
@@ -164,7 +164,9 @@ export class QueueService implements OnModuleDestroy {
 
     try {
       await Promise.all(
-        Array.from(this.workers).map((worker) => worker.close()),
+        Array.from(this.workers).map((worker: Worker<any, any, string>) =>
+          worker.close(),
+        ),
       );
       await Promise.all(
         Array.from(this.queues.values()).map((queue) => queue.close()),

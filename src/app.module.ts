@@ -6,7 +6,11 @@ import {
   SecurityModule,
   SystemModule,
 } from './core';
-import { OrdersModule } from './modules';
+import {
+  HardwareCommunicationModule,
+  IntakeOrdersModule,
+  PrepareOrdersModule,
+} from './modules';
 import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
@@ -19,7 +23,9 @@ import { PrismaModule } from './prisma/prisma.module';
     PrismaModule,
     SecurityModule,
     SystemModule,
-    OrdersModule,
+    IntakeOrdersModule,
+    PrepareOrdersModule,
+    HardwareCommunicationModule,
   ],
 })
 export class AppModule {}
