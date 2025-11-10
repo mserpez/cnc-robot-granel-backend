@@ -3,8 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
-import { LoggingService } from './core/logging/logging.service';
-import { BullBoardService } from './core/queue/bull-board.service';
+import { BullBoardService, LoggingService } from './core';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, {

@@ -61,9 +61,8 @@ export class BullBoardService {
       httpAdapter.use(basePath, router);
 
       this.mounted = true;
-      this.loggingService.log(`Bull Board mounted at ${basePath}`, context);
       this.loggingService.log(
-        `Queue admin panel running: ${basePath}`,
+        `Bull Board mounted at http://localhost:${this.configService.get<string>('PORT')}${basePath}`,
         context,
       );
     } catch (error) {
