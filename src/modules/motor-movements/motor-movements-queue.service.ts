@@ -1,12 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { Queue } from 'bullmq';
-import { INTAKE_ORDERS_QUEUE } from '../../constants';
+import { MOTOR_MOVEMENTS_QUEUE } from '../../constants';
 import { LoggingService, QueueService } from '../../core';
-import type { PrepareOrderJobPayload } from '../prepare-orders';
+import type { MotorMovementJobPayload } from './motor-movements.types';
 
 @Injectable()
-export class IntakeOrdersQueueService {
-  private readonly queue: Queue<PrepareOrderJobPayload, void, string>;
+export class MotorMovementsQueueService {
+  private readonly queue: Queue<MotorMovementJobPayload, void, string>;
 
   constructor(
     private readonly queueService: QueueService,
@@ -15,20 +15,20 @@ export class IntakeOrdersQueueService {
     this.queue = this.initializeQueue();
   }
 
-  getQueue(): Queue<PrepareOrderJobPayload, void, string> {
-    const context = 'IntakeOrdersQueueService.getQueue';
+  getQueue(): Queue<MotorMovementJobPayload, void, string> {
+    const context = 'MotorMovementsQueueService.getQueue';
     this.loggingService.debug('Entering getQueue', context);
 
     try {
       this.loggingService.debug(
-        `getQueue returning queue ${INTAKE_ORDERS_QUEUE}`,
+        `getQueue returning queue ${MOTOR_MOVEMENTS_QUEUE}`,
         context,
       );
       return this.queue;
     } catch (error) {
       const trace = error instanceof Error ? error.stack : String(error);
       this.loggingService.error(
-        `Error accessing queue ${INTAKE_ORDERS_QUEUE}`,
+        `Error accessing queue ${MOTOR_MOVEMENTS_QUEUE}`,
         trace,
         context,
       );
@@ -36,25 +36,24 @@ export class IntakeOrdersQueueService {
     }
   }
 
-  private initializeQueue(): Queue<PrepareOrderJobPayload, void, string> {
-    const context = 'IntakeOrdersQueueService.initializeQueue';
+  private initializeQueue(): Queue<MotorMovementJobPayload, void, string> {
+    const context = 'MotorMovementsQueueService.initializeQueue';
     this.loggingService.debug('Entering initializeQueue', context);
 
     try {
-      const queue = this.queueService.getQueue(INTAKE_ORDERS_QUEUE) as Queue<
-        PrepareOrderJobPayload,
-        void,
-        string
-      >;
+      const queue: Queue<MotorMovementJobPayload, void, string> =
+        this.queueService.getQueue(MOTOR_MOVEMENTS_QUEUE);
+
       this.loggingService.debug(
-        `initializeQueue returning queue ${INTAKE_ORDERS_QUEUE}`,
+        `initializeQueue returning queue ${MOTOR_MOVEMENTS_QUEUE}`,
         context,
       );
+
       return queue;
     } catch (error) {
       const trace = error instanceof Error ? error.stack : String(error);
       this.loggingService.error(
-        `Error initializing queue ${INTAKE_ORDERS_QUEUE}`,
+        `Error initializing queue ${MOTOR_MOVEMENTS_QUEUE}`,
         trace,
         context,
       );

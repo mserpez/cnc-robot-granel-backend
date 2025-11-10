@@ -10,6 +10,7 @@ import {
   HardwareCommunicationModule,
   IntakeOrdersModule,
   PrepareOrdersModule,
+  MotorMovementsModule,
 } from './modules';
 import { PrismaModule } from './prisma/prisma.module';
 
@@ -25,6 +26,7 @@ import { PrismaModule } from './prisma/prisma.module';
     SystemModule,
     IntakeOrdersModule,
     PrepareOrdersModule,
+    MotorMovementsModule,
     HardwareCommunicationModule,
   ],
 })

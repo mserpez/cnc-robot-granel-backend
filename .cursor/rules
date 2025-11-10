@@ -2,7 +2,10 @@
 - Limitarse a las tareas solicitadas; consultar antes de sugerir acciones adicionales.
 - Mantener definiciones y descripciones lo más concisas y puntuales posible.
 - Utilizar TypeScript de forma consistente en todo el código del backend.
+- Garantizar tipado explícito para colas BullMQ y cualquier estructura compartida.
 - Mantener separación estricta de responsabilidades: módulos por dominio, servicios con funciones internas, repositories para acceso a datos y Prisma como ORM.
 - Emplear siempre el servicio de logging centralizado para registrar eventos y errores.
 - Cada función en servicios o repositories debe envolver su lógica en try/catch: log de debug al inicio con los parámetros, log de debug al finalizar con el resultado, y en el catch relanzar la excepción tras registrar el error.
 - Cada módulo debe exponer públicamente sus elementos mediante archivos index.ts dentro de la carpeta del módulo.
+- Siempre ejecutar `npm run lint` y corregir los hallazgos antes de finalizar una tarea.
+- Ejecutar `npm run build` para validar el chequeo de TypeScript antes de dar una tarea por completa.

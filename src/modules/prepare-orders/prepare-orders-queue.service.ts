@@ -1,11 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import type { Queue } from 'bullmq';
+import { Queue } from 'bullmq';
 import { PREPARE_ORDERS_QUEUE } from '../../constants';
 import { LoggingService, QueueService } from '../../core';
+import type { PrepareOrderJobPayload } from './prepare-orders.types';
 
 @Injectable()
 export class PrepareOrdersQueueService {
-  private readonly queue: Queue;
+  private readonly queue: Queue<PrepareOrderJobPayload, void, string>;
 
   constructor(
     private readonly queueService: QueueService,
@@ -14,7 +15,7 @@ export class PrepareOrdersQueueService {
     this.queue = this.initializeQueue();
   }
 
-  getQueue(): Queue {
+  getQueue(): Queue<PrepareOrderJobPayload, void, string> {
     const context = 'PrepareOrdersQueueService.getQueue';
     this.loggingService.debug('Entering getQueue', context);
 
@@ -35,12 +36,13 @@ export class PrepareOrdersQueueService {
     }
   }
 
-  private initializeQueue(): Queue {
+  private initializeQueue(): Queue<PrepareOrderJobPayload, void, string> {
     const context = 'PrepareOrdersQueueService.initializeQueue';
     this.loggingService.debug('Entering initializeQueue', context);
 
     try {
-      const queue: Queue = this.queueService.getQueue(PREPARE_ORDERS_QUEUE);
+      const queue: Queue<PrepareOrderJobPayload, void, string> =
+        this.queueService.getQueue(PREPARE_ORDERS_QUEUE);
       this.loggingService.debug(
         `initializeQueue returning queue ${PREPARE_ORDERS_QUEUE}`,
         context,
