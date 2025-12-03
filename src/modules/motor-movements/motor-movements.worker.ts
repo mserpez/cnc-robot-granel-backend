@@ -19,7 +19,7 @@ export class MotorMovementsWorker implements OnModuleInit {
 
   onModuleInit(): void {
     this.queueService.createWorker<MotorMovementJobPayload>(
-      MOTOR_MOVEMENTS_QUEUE,
+      MOTOR_MOVEMENTS_QUEUE.NAME,
       async (job) => {
         const context = 'MotorMovementsWorker';
         this.loggingService.debug(

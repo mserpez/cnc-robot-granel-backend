@@ -8,6 +8,7 @@ import {
   type AxisEventKey,
   type SensorEventKey,
 } from './hardware-communication.constants';
+import { simulateHardwareCommand } from './hardware-communication.mock';
 import type {
   AxisHandlersMap,
   AxisMoveCallback,
@@ -212,6 +213,14 @@ export class HardwareCommunicationService {
       }`,
       context,
     );
+
+    if (!this.usbTransport) {
+      this.loggingService.warn(
+        `USB transport not configured. Using mock response for ${command}`,
+        context,
+      );
+      return simulateHardwareCommand(command, payload);
+    }
 
     try {
       const transport = await this.ensureTransport(context);

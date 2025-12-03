@@ -1,98 +1,46 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# CNC Robot Granel Backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Backend NestJS para el sistema CNC Robot Granel.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Configuración
 
-## Description
+### Variables de Entorno
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+Copia `.env.example` a `.env` y configura las siguientes variables:
 
-## Project setup
+- `PORT`: Puerto HTTP del servidor (default: 3000)
+- `SERVER_PORT`: Puerto del servidor para discovery (default: usa PORT si no está definido)
+- `MQTT_BROKER_HOST`: Host del broker MQTT (default: localhost)
+- `MQTT_BROKER_PORT`: Puerto del broker MQTT (default: 1883, usar 8883 para SSL/TLS)
+- `MQTT_BROKER_USERNAME`: Usuario para autenticación MQTT (opcional)
+- `MQTT_BROKER_PASSWORD`: Contraseña para autenticación MQTT (opcional)
+- `MQTT_BROKER_USE_TLS`: Forzar uso de TLS/SSL (default: auto-detecta si puerto es 8883)
+- `UDP_DISCOVERY_PORT`: Puerto UDP para discovery del broker MQTT (default: 1884)
+- `DEBUG_LEVEL`: Nivel de logging (default: debug)
 
-```bash
-$ npm install
+### Ejemplo para HiveMQ Cloud
+
+```env
+MQTT_BROKER_HOST=tu-cluster.hivemq.cloud
+MQTT_BROKER_PORT=8883
+MQTT_BROKER_USERNAME=tu-usuario
+MQTT_BROKER_PASSWORD=tu-password
+MQTT_BROKER_USE_TLS=true
 ```
 
-## Compile and run the project
+## Discovery MQTT
 
-```bash
-# development
-$ npm run start
+El backend implementa un sistema de discovery que permite a los dispositivos Arduino descubrir el broker MQTT y el servidor backend:
 
-# watch mode
-$ npm run start:dev
+1. **UDP Discovery**: Los dispositivos envían un broadcast UDP al puerto `UDP_DISCOVERY_PORT` con el mensaje `"CNC_GRANEL_DISCOVERY"`. El backend responde con la información del broker MQTT.
 
-# production mode
-$ npm run start:prod
-```
+2. **MQTT Discovery**: Una vez conectados al broker MQTT, los dispositivos publican en `cnc-granel/discovery/{uuid}` y el backend responde en `cnc-granel/discovery/{uuid}/response` con la información del servidor.
 
-## Run tests
+## Estructura de Topics MQTT
 
-```bash
-# unit tests
-$ npm run test
+- `cnc-granel/discovery/{uuid}` - Device publica aquí para discovery
+- `cnc-granel/discovery/{uuid}/response` - Backend responde aquí
+- `cnc-granel/{uuid}/heartbeat` - Heartbeat del device (futuro)
+- `cnc-granel/{uuid}/config` - Configuración del device (futuro)
+- `cnc-granel/{uuid}/component/+/command` - Comandos a componentes (futuro)
 
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
-```
-
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).

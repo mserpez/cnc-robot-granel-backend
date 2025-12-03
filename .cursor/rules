@@ -9,3 +9,5 @@
 - Cada módulo debe exponer públicamente sus elementos mediante archivos index.ts dentro de la carpeta del módulo.
 - Siempre ejecutar `npm run lint` y corregir los hallazgos antes de finalizar una tarea.
 - Ejecutar `npm run build` para validar el chequeo de TypeScript antes de dar una tarea por completa.
+- La lógica de negocio debe residir en servicios; los controladores solo deben delegar en servicios existentes.
+- Nunca hardcodear nombres de colas o jobs; utilizar únicamente constantes definidas en `queue.constants.ts`.

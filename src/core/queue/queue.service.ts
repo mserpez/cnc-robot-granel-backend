@@ -1,6 +1,13 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Processor, Queue, QueueOptions, Worker, WorkerOptions } from 'bullmq';
+import {
+  Processor,
+  Queue,
+  QueueEvents,
+  QueueOptions,
+  Worker,
+  WorkerOptions,
+} from 'bullmq';
 import { LoggingService } from '../logging/logging.service';
 
 type ConnectionOptions = NonNullable<QueueOptions['connection']>;
@@ -15,6 +22,7 @@ export class QueueService implements OnModuleDestroy {
   private readonly connectionOptions: ConnectionOptions;
   private readonly queues = new Map<string, Queue>();
   private readonly workers = new Set<Worker<any, any, string>>();
+  private readonly queueEvents = new Map<string, QueueEvents>();
 
   constructor(
     private readonly configService: ConfigService,
@@ -155,6 +163,16 @@ export class QueueService implements OnModuleDestroy {
     }
   }
 
+  getQueueEvents(name: string): QueueEvents {
+    if (!this.queueEvents.has(name)) {
+      const queueEvents = new QueueEvents(name, {
+        connection: this.connectionOptions,
+      });
+      this.queueEvents.set(name, queueEvents);
+    }
+    return this.queueEvents.get(name) as QueueEvents;
+  }
+
   async onModuleDestroy(): Promise<void> {
     const context = 'QueueService.onModuleDestroy';
     this.loggingService.debug(
@@ -170,6 +188,11 @@ export class QueueService implements OnModuleDestroy {
       );
       await Promise.all(
         Array.from(this.queues.values()).map((queue) => queue.close()),
+      );
+      await Promise.all(
+        Array.from(this.queueEvents.values()).map((queueEvent) =>
+          queueEvent.close(),
+        ),
       );
 
       this.loggingService.debug(

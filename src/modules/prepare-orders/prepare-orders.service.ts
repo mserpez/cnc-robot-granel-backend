@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { JobsOptions, Queue } from 'bullmq';
-import { PREPARE_ORDER_JOB_NAME } from '../../constants';
+import { ORDER_PREPARE_QUEUE } from '../../constants';
 import { LoggingService } from '../../core';
 import {
   HardwareCommunicationService,
@@ -33,7 +33,18 @@ export class PrepareOrdersService {
 
     const queue: Queue<PrepareOrderJobPayload, void, string> =
       this.queueService.getQueue();
-    await queue.add(PREPARE_ORDER_JOB_NAME, payload, options);
+
+    const jobOptions: JobsOptions = {
+      removeOnComplete: options?.removeOnComplete ?? false,
+      removeOnFail: options?.removeOnFail ?? false,
+      ...options,
+    };
+
+    await queue.add(
+      ORDER_PREPARE_QUEUE.JOBS.PREPARE_ORDER,
+      payload,
+      jobOptions,
+    );
   }
 
   async processPrepareOrder(payload: PrepareOrderJobPayload): Promise<void> {
@@ -45,6 +56,7 @@ export class PrepareOrdersService {
 
     await this.homeAxes();
     await this.moveToHopper(payload.hopperId);
+    await this.closeDispenserGate();
     await this.performDispenseRoutine(payload);
     await this.returnToSafeState();
 
@@ -53,23 +65,32 @@ export class PrepareOrdersService {
 
   private async homeAxes(): Promise<void> {
     await this.motorMovements.enqueueCommand({
-      command: MOTOR_COMMAND_KEYS.MOVE_Y_HOME,
+      command: MOTOR_COMMAND_KEYS.MOVE_A_HOME,
     });
     await this.motorMovements.enqueueCommand({
       command: MOTOR_COMMAND_KEYS.MOVE_X_HOME,
     });
     await this.motorMovements.enqueueCommand({
-      command: MOTOR_COMMAND_KEYS.MOVE_A_HOME,
+      command: MOTOR_COMMAND_KEYS.MOVE_X_TO_CENTER,
+    });
+    await this.motorMovements.enqueueCommand({
+      command: MOTOR_COMMAND_KEYS.MOVE_Y_HOME,
     });
   }
 
   private async moveToHopper(hopperId: string): Promise<void> {
     await this.motorMovements.enqueueCommand({
+      command: MOTOR_COMMAND_KEYS.MOVE_X_TO_CENTER,
+    });
+    await this.motorMovements.enqueueCommand({
       command: MOTOR_COMMAND_KEYS.MOVE_Y_TO_HOPPER,
       params: { hopperId },
     });
+  }
+
+  private async closeDispenserGate(): Promise<void> {
     await this.motorMovements.enqueueCommand({
-      command: MOTOR_COMMAND_KEYS.MOVE_X_TO_CENTER,
+      command: MOTOR_COMMAND_KEYS.MOVE_A_CLOSE,
     });
   }
 
@@ -78,9 +99,10 @@ export class PrepareOrdersService {
   ): Promise<void> {
     const context = 'PrepareOrdersService.performDispenseRoutine';
 
-    await this.prepareForDispense();
+    await this.connectXAxisToHopper();
 
     const weightPerTurn = await this.rotateAndMeasure(1, 'initial-turn');
+
     if (weightPerTurn <= 0) {
       throw new Error(
         'Initial calibration failed: weight per rotation is zero',
@@ -121,6 +143,8 @@ export class PrepareOrdersService {
         context,
       );
     }
+
+    await this.openDispenserGate();
   }
 
   private buildPhases(initialFraction: number): number[] {
@@ -129,24 +153,10 @@ export class PrepareOrdersService {
     return [adjustedNinety, ...this.DISPENSE_PHASES.slice(1)];
   }
 
-  private async prepareForDispense(): Promise<void> {
-    await this.motorMovements.enqueueCommand({
-      command: MOTOR_COMMAND_KEYS.MOVE_A_OPEN,
-    });
-    await this.motorMovements.enqueueCommand({
-      command: MOTOR_COMMAND_KEYS.MOVE_X_TO_LEFT,
-    });
+  private async connectXAxisToHopper(): Promise<void> {
+    // TODO: It could be left or right, depending on the hopper position
     await this.motorMovements.enqueueCommand({
       command: MOTOR_COMMAND_KEYS.MOVE_X_TO_RIGHT,
-    });
-    await this.motorMovements.enqueueCommand({
-      command: MOTOR_COMMAND_KEYS.MOVE_X_TO_CENTER,
-    });
-    await this.motorMovements.enqueueCommand({
-      command: MOTOR_COMMAND_KEYS.MOVE_A_CLOSE,
-    });
-    await this.motorMovements.enqueueCommand({
-      command: MOTOR_COMMAND_KEYS.MOVE_X_TO_CENTER,
     });
     await this.hardware.tareScale();
   }
@@ -163,6 +173,39 @@ export class PrepareOrdersService {
     const weight = await this.hardware.getCurrentWeight();
     this.loggingService.debug(`${label}: measured ${weight}g`, context);
     return weight;
+  }
+
+  private async openDispenserGate(): Promise<void> {
+    const context = 'PrepareOrdersService.openDispenserGate';
+    await this.motorMovements.enqueueCommand({
+      command: MOTOR_COMMAND_KEYS.MOVE_A_OPEN,
+    });
+
+    const maxRetries = 5;
+    for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
+      const weight = await this.hardware.getCurrentWeight();
+
+      if (weight <= 0) {
+        this.loggingService.debug(
+          'Scale indicates zero weight, closing dispenser gate',
+          context,
+        );
+        await this.motorMovements.enqueueCommand({
+          command: MOTOR_COMMAND_KEYS.MOVE_A_CLOSE,
+        });
+        return;
+      }
+
+      this.loggingService.debug(
+        `Scale still reports ${weight}g (attempt ${attempt}/${maxRetries})`,
+        context,
+      );
+    }
+
+    throw new Error(
+      'Dispenser gate timeout: scale never reached zero after 5 attempts',
+    );
   }
 
   private async returnToSafeState(): Promise<void> {

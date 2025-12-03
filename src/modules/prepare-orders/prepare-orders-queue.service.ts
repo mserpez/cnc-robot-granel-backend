@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Queue } from 'bullmq';
-import { PREPARE_ORDERS_QUEUE } from '../../constants';
+import { ORDER_PREPARE_QUEUE } from '../../constants';
 import { LoggingService, QueueService } from '../../core';
 import type { PrepareOrderJobPayload } from './prepare-orders.types';
 
@@ -21,14 +21,14 @@ export class PrepareOrdersQueueService {
 
     try {
       this.loggingService.debug(
-        `getQueue returning queue ${PREPARE_ORDERS_QUEUE}`,
+        `getQueue returning queue ${ORDER_PREPARE_QUEUE.NAME}`,
         context,
       );
       return this.queue;
     } catch (error) {
       const trace = error instanceof Error ? error.stack : String(error);
       this.loggingService.error(
-        `Error accessing queue ${PREPARE_ORDERS_QUEUE}`,
+        `Error accessing queue ${ORDER_PREPARE_QUEUE.NAME}`,
         trace,
         context,
       );
@@ -42,16 +42,16 @@ export class PrepareOrdersQueueService {
 
     try {
       const queue: Queue<PrepareOrderJobPayload, void, string> =
-        this.queueService.getQueue(PREPARE_ORDERS_QUEUE);
+        this.queueService.getQueue(ORDER_PREPARE_QUEUE.NAME);
       this.loggingService.debug(
-        `initializeQueue returning queue ${PREPARE_ORDERS_QUEUE}`,
+        `initializeQueue returning queue ${ORDER_PREPARE_QUEUE.NAME}`,
         context,
       );
       return queue;
     } catch (error) {
       const trace = error instanceof Error ? error.stack : String(error);
       this.loggingService.error(
-        `Error initializing queue ${PREPARE_ORDERS_QUEUE}`,
+        `Error initializing queue ${ORDER_PREPARE_QUEUE.NAME}`,
         trace,
         context,
       );

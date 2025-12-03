@@ -33,4 +33,9 @@ export class SystemController {
       throw error;
     }
   }
+
+  @Get('discovery-server')
+  discoveryServer(): number {
+    return 1;
+  }
 }

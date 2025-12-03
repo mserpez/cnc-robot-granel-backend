@@ -57,8 +57,7 @@ describe('HardwareCommunicationService', () => {
   });
 
   it('should open the transport when needed and return the USB response', async () => {
-    usbTransport.isOpen.mockReturnValue(false);
-    usbTransport.isOpen.mockReturnValue(true);
+    usbTransport.isOpen.mockReturnValueOnce(false).mockReturnValue(true);
     usbTransport.open.mockResolvedValue(undefined);
     usbTransport.write.mockResolvedValue(undefined);
     const response: UsbInboundMessage = { status: 'ok', data: { ready: true } };
@@ -76,7 +75,6 @@ describe('HardwareCommunicationService', () => {
   });
 
   it('should use the existing transport session when already open', async () => {
-    usbTransport.isOpen.mockReturnValue(true);
     usbTransport.isOpen.mockReturnValue(true);
     usbTransport.open.mockResolvedValue(undefined);
     usbTransport.write.mockResolvedValue(undefined);
@@ -106,7 +104,7 @@ describe('HardwareCommunicationService', () => {
     expect(usbTransport.read).not.toHaveBeenCalled();
   });
 
-  it('should throw when no USB transport is configured', async () => {
+  it('should fall back to mock responses when no USB transport is configured', async () => {
     const isolatedModule: TestingModule = await Test.createTestingModule({
       providers: [
         HardwareCommunicationService,
@@ -121,8 +119,8 @@ describe('HardwareCommunicationService', () => {
       HardwareCommunicationService,
     );
 
-    await expect(isolatedService.sendCommand('PING')).rejects.toThrow(
-      'USB transport is not configured',
-    );
+    const response = await isolatedService.sendCommand('PING');
+
+    expect(response.status).toBe('ok');
   });
 });

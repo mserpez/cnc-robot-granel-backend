@@ -21,14 +21,14 @@ export class MotorMovementsQueueService {
 
     try {
       this.loggingService.debug(
-        `getQueue returning queue ${MOTOR_MOVEMENTS_QUEUE}`,
+        `getQueue returning queue ${MOTOR_MOVEMENTS_QUEUE.NAME}`,
         context,
       );
       return this.queue;
     } catch (error) {
       const trace = error instanceof Error ? error.stack : String(error);
       this.loggingService.error(
-        `Error accessing queue ${MOTOR_MOVEMENTS_QUEUE}`,
+        `Error accessing queue ${MOTOR_MOVEMENTS_QUEUE.NAME}`,
         trace,
         context,
       );
@@ -42,10 +42,10 @@ export class MotorMovementsQueueService {
 
     try {
       const queue: Queue<MotorMovementJobPayload, void, string> =
-        this.queueService.getQueue(MOTOR_MOVEMENTS_QUEUE);
+        this.queueService.getQueue(MOTOR_MOVEMENTS_QUEUE.NAME);
 
       this.loggingService.debug(
-        `initializeQueue returning queue ${MOTOR_MOVEMENTS_QUEUE}`,
+        `initializeQueue returning queue ${MOTOR_MOVEMENTS_QUEUE.NAME}`,
         context,
       );
 
@@ -53,7 +53,7 @@ export class MotorMovementsQueueService {
     } catch (error) {
       const trace = error instanceof Error ? error.stack : String(error);
       this.loggingService.error(
-        `Error initializing queue ${MOTOR_MOVEMENTS_QUEUE}`,
+        `Error initializing queue ${MOTOR_MOVEMENTS_QUEUE.NAME}`,
         trace,
         context,
       );

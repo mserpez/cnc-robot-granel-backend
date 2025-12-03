@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Queue } from 'bullmq';
-import { INTAKE_ORDERS_QUEUE } from '../../constants';
+import { ORDER_INTAKE_QUEUE } from '../../constants';
 import { LoggingService, QueueService } from '../../core';
 import type { PrepareOrderJobPayload } from '../prepare-orders';
 
@@ -21,14 +21,14 @@ export class IntakeOrdersQueueService {
 
     try {
       this.loggingService.debug(
-        `getQueue returning queue ${INTAKE_ORDERS_QUEUE}`,
+        `getQueue returning queue ${ORDER_INTAKE_QUEUE.NAME}`,
         context,
       );
       return this.queue;
     } catch (error) {
       const trace = error instanceof Error ? error.stack : String(error);
       this.loggingService.error(
-        `Error accessing queue ${INTAKE_ORDERS_QUEUE}`,
+        `Error accessing queue ${ORDER_INTAKE_QUEUE.NAME}`,
         trace,
         context,
       );
@@ -41,20 +41,18 @@ export class IntakeOrdersQueueService {
     this.loggingService.debug('Entering initializeQueue', context);
 
     try {
-      const queue = this.queueService.getQueue(INTAKE_ORDERS_QUEUE) as Queue<
-        PrepareOrderJobPayload,
-        void,
-        string
-      >;
+      const queue = this.queueService.getQueue(
+        ORDER_INTAKE_QUEUE.NAME,
+      ) as Queue<PrepareOrderJobPayload, void, string>;
       this.loggingService.debug(
-        `initializeQueue returning queue ${INTAKE_ORDERS_QUEUE}`,
+        `initializeQueue returning queue ${ORDER_INTAKE_QUEUE.NAME}`,
         context,
       );
       return queue;
     } catch (error) {
       const trace = error instanceof Error ? error.stack : String(error);
       this.loggingService.error(
-        `Error initializing queue ${INTAKE_ORDERS_QUEUE}`,
+        `Error initializing queue ${ORDER_INTAKE_QUEUE.NAME}`,
         trace,
         context,
       );
