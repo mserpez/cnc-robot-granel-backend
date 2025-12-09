@@ -79,12 +79,43 @@ export class QueueService implements OnModuleDestroy {
     );
 
     try {
+      // Configurar opciones de conexión con límites de retry para evitar reconexiones infinitas
+      // BullMQ usa ioredis internamente, que acepta estas opciones aunque TypeScript no las reconozca
+      const connectionWithRetry = {
+        ...this.connectionOptions,
+        maxRetriesPerRequest: 3, // Máximo 3 reintentos por request
+        retryStrategy: (times: number) => {
+          // Si falla más de 5 veces, dejar de intentar
+          if (times > 5) {
+            return null; // null = detener reintentos
+          }
+          // Esperar entre reintentos: 200ms, 400ms, 800ms, 1600ms, 3200ms
+          return Math.min(times * 200, 3200);
+        },
+        enableOfflineQueue: false, // No encolar requests cuando está offline
+      } as ConnectionOptions;
+
       const queueOptions: QueueOptions = {
-        connection: this.connectionOptions,
+        connection: connectionWithRetry,
         ...options,
       };
 
       const queue: Queue = new Queue(name, queueOptions);
+
+      // Silenciar errores de conexión de BullMQ (ya los manejamos en el dashboard)
+      queue.on('error', (error) => {
+        // Solo loggear si no es ECONNREFUSED (Redis caído)
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        if (!errorMessage.includes('ECONNREFUSED')) {
+          this.loggingService.error(
+            `Queue ${name} error`,
+            error instanceof Error ? error.stack : String(error),
+            context,
+          );
+        }
+      });
+
       this.queues.set(name, queue);
 
       this.loggingService.debug(`createQueue returning queue ${name}`, context);
@@ -112,8 +143,22 @@ export class QueueService implements OnModuleDestroy {
     );
 
     try {
+      // Usar las mismas opciones de conexión con límites de retry
+      // BullMQ usa ioredis internamente, que acepta estas opciones aunque TypeScript no las reconozca
+      const connectionWithRetry = {
+        ...this.connectionOptions,
+        maxRetriesPerRequest: 3,
+        retryStrategy: (times: number) => {
+          if (times > 5) {
+            return null;
+          }
+          return Math.min(times * 200, 3200);
+        },
+        enableOfflineQueue: false,
+      } as ConnectionOptions;
+
       const workerOptions: WorkerOptions = {
-        connection: this.connectionOptions,
+        connection: connectionWithRetry,
         ...options,
       };
 

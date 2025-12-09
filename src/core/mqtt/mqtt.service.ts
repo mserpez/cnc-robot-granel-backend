@@ -1,9 +1,11 @@
-import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as mqtt from 'mqtt';
-import { LoggingService } from '../logging/logging.service';
-import type { DiscoveryRequest, DiscoveryResponse } from './mqtt.types';
 import * as os from 'os';
+import { MQTT_TOPICS, SERVER_DEVICE_ID } from '../../constants';
+import { DeviceService } from '../device/device.service';
+import { LoggingService } from '../logging/logging.service';
+import type { DiscoveryMessage } from './mqtt.types';
 
 @Injectable()
 export class MqttService implements OnModuleInit, OnModuleDestroy {
@@ -14,7 +16,6 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
   private readonly brokerPassword?: string;
   private readonly useTls: boolean;
   private readonly serverPort: number;
-  private readonly discoveryTopicPattern = 'cnc-granel/discovery/+';
   private isConnected = false;
   private connectionErrorCount = 0;
   private lastErrorLogTime = 0;
@@ -23,15 +24,18 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly configService: ConfigService,
     private readonly loggingService: LoggingService,
+    private readonly deviceService: DeviceService,
   ) {
     this.brokerHost =
       this.configService.get<string>('MQTT_BROKER_HOST') ?? 'localhost';
     this.brokerPort =
       this.configService.get<number>('MQTT_BROKER_PORT') ?? 1883;
-    this.brokerUsername =
-      this.configService.get<string>('MQTT_BROKER_USERNAME');
-    this.brokerPassword =
-      this.configService.get<string>('MQTT_BROKER_PASSWORD');
+    this.brokerUsername = this.configService.get<string>(
+      'MQTT_BROKER_USERNAME',
+    );
+    this.brokerPassword = this.configService.get<string>(
+      'MQTT_BROKER_PASSWORD',
+    );
     // TLS si el puerto es 8883 (estándar SSL) o si está explícitamente configurado
     this.useTls =
       this.configService.get<string>('MQTT_BROKER_USE_TLS') === 'true' ||
@@ -56,7 +60,10 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
       this.client = null;
       this.isConnected = false;
       this.connectionErrorCount = 0;
-      this.loggingService.log('Backend disconnected from MQTT broker', 'MqttService');
+      this.loggingService.log(
+        'Backend disconnected from MQTT broker',
+        'MqttService',
+      );
     }
   }
 
@@ -72,8 +79,9 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
 
     const connectOptions: mqtt.IClientOptions = {
       clientId: `cnc-granel-backend-${Date.now()}`,
-      reconnectPeriod: 5000,
+      reconnectPeriod: 5000, // Intentar reconectar cada 5 segundos
       connectTimeout: 10000,
+      keepalive: 60, // Mantener conexión viva
     };
 
     // Agregar autenticación si está configurada
@@ -99,7 +107,10 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
         `Backend connected to MQTT broker at ${brokerUrl}`,
         context,
       );
+      // Resubscribirse después de reconexión
       this.subscribeToDiscovery();
+      // Enviar broadcast para que dispositivos se reconecten
+      this.broadcastServerOnline();
     });
 
     this.client.on('error', (error) => {
@@ -110,15 +121,18 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
       // Solo loggear errores si:
       // 1. Es el primer error, o
       // 2. Han pasado más de ERROR_LOG_INTERVAL_MS desde el último log
-      if (this.connectionErrorCount === 1 || timeSinceLastLog >= this.ERROR_LOG_INTERVAL_MS) {
+      if (
+        this.connectionErrorCount === 1 ||
+        timeSinceLastLog >= this.ERROR_LOG_INTERVAL_MS
+      ) {
         const errorMessage = error.message || String(error);
         const errorStack = error.stack || String(error);
         const errorString = String(error);
-        
+
         // Detectar ECONNREFUSED en mensaje, stack o string completo
         // AggregateError puede tener ECONNREFUSED en sus errores internos
-        const isConnectionRefused = 
-          errorMessage.includes('ECONNREFUSED') || 
+        const isConnectionRefused =
+          errorMessage.includes('ECONNREFUSED') ||
           errorMessage.includes('connect ECONNREFUSED') ||
           errorStack.includes('ECONNREFUSED') ||
           errorString.includes('ECONNREFUSED');
@@ -144,24 +158,37 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
       this.isConnected = false;
       // Solo loggear close si estaba conectado previamente
       if (this.connectionErrorCount === 0) {
-        this.loggingService.warn('Backend disconnected from MQTT broker', context);
+        this.loggingService.warn(
+          'Backend disconnected from MQTT broker',
+          context,
+        );
       }
     });
 
     this.client.on('reconnect', () => {
-      // Solo loggear reconnect en modo debug, no es crítico
-      this.loggingService.debug('Backend reconnecting to MQTT broker...', context);
+      // Cuando se reconecta, el flag se actualizará en el evento 'connect'
+      this.loggingService.debug(
+        'Backend reconnecting to MQTT broker...',
+        context,
+      );
     });
 
     this.client.on('offline', () => {
       this.isConnected = false;
       // Solo loggear offline si estaba conectado previamente
       if (this.connectionErrorCount === 0) {
-        this.loggingService.warn('Backend lost connection to MQTT broker', context);
+        this.loggingService.warn(
+          'Backend lost connection to MQTT broker',
+          context,
+        );
       }
     });
 
     this.client.on('message', (topic, message) => {
+      this.loggingService.log(
+        `MQTT message received on topic: ${topic}`,
+        'MqttService.onMessage',
+      );
       this.handleMessage(topic, message);
     });
   }
@@ -178,16 +205,16 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    this.client.subscribe(this.discoveryTopicPattern, (err) => {
+    this.client.subscribe(MQTT_TOPICS.DISCOVERY.TOPIC, (err) => {
       if (err) {
         this.loggingService.error(
-          `Failed to subscribe to ${this.discoveryTopicPattern}`,
+          `Failed to subscribe to ${MQTT_TOPICS.DISCOVERY.TOPIC}`,
           err.stack,
           context,
         );
       } else {
         this.loggingService.log(
-          `Subscribed to ${this.discoveryTopicPattern}`,
+          `Subscribed to ${MQTT_TOPICS.DISCOVERY.TOPIC}`,
           context,
         );
       }
@@ -199,18 +226,16 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
 
     try {
       const messageStr = message.toString('utf8');
-      this.loggingService.debug(
+      this.loggingService.log(
         `Received MQTT message on topic ${topic}: ${messageStr}`,
         context,
       );
 
-      // Verificar si es un topic de discovery
-      if (topic.startsWith('cnc-granel/discovery/')) {
-        const uuid = topic.replace('cnc-granel/discovery/', '');
-        if (uuid && !uuid.includes('/')) {
-          // Es un discovery request, no una respuesta
-          this.handleDiscoveryRequest(uuid, messageStr);
-        }
+      // Procesar discovery messages
+      // Topic único: 'cnc-granel/discovery' (deviceId viene en payload)
+      if (topic === MQTT_TOPICS.DISCOVERY.TOPIC) {
+        const payload: DiscoveryMessage = JSON.parse(messageStr);
+        this.handleDiscovery(payload);
       }
     } catch (error) {
       this.loggingService.error(
@@ -221,66 +246,105 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private handleDiscoveryRequest(uuid: string, messageStr: string): void {
-    const context = 'MqttService.handleDiscoveryRequest';
+  private handleDiscovery(message: DiscoveryMessage): void {
+    const context = 'MqttService.handleDiscovery';
+
+    // Ejecutar async sin bloquear
+    this.handleDiscoveryAsync(message).catch((error) => {
+      this.loggingService.error(
+        `Error processing discovery message from ${message.deviceId}`,
+        (error as Error).stack,
+        context,
+      );
+    });
+  }
+
+  private async handleDiscoveryAsync(message: DiscoveryMessage): Promise<void> {
+    const context = 'MqttService.handleDiscoveryAsync';
 
     try {
-      const request: DiscoveryRequest = JSON.parse(messageStr);
-
-      this.loggingService.debug(
-        `Discovery request from device ${uuid}: ${JSON.stringify(request)}`,
+      this.loggingService.log(
+        `Discovery message from device ${message.deviceId}: ${JSON.stringify(message)}`,
         context,
       );
 
-      // Responder con información del servidor
-      const response: DiscoveryResponse = {
-        server_ip: this.getLocalIPAddress(),
-        server_port: this.serverPort,
-        status: 'ready',
-      };
+      // Ignorar si es el servidor
+      if (message.deviceId === SERVER_DEVICE_ID) {
+        this.loggingService.debug(
+          'Ignoring discovery message from server',
+          context,
+        );
+        return;
+      }
 
-      this.sendDiscoveryResponse(uuid, response);
+      // Registrar dispositivo en el service
+      if (!this.deviceService) {
+        this.loggingService.error(
+          'DeviceService is not available',
+          undefined,
+          context,
+        );
+        return;
+      }
+
+      this.loggingService.log(
+        `Registering device ${message.deviceId} with IP ${message.ip || 'N/A'}, Board: ${message.boardName || 'N/A'}, Firmware: ${message.firmwareVersion || 'N/A'}`,
+        context,
+      );
+      await this.deviceService.registerDevice(
+        message.deviceId,
+        message.ip,
+        message.boardName,
+        message.firmwareVersion,
+      );
+      // No hay response - comunicación solo por MQTT
     } catch (error) {
       this.loggingService.error(
-        `Error processing discovery request from ${uuid}`,
+        `Error processing discovery message from ${message.deviceId}`,
         (error as Error).stack,
         context,
       );
     }
   }
 
-  private sendDiscoveryResponse(
-    uuid: string,
-    response: DiscoveryResponse,
-  ): void {
-    const context = 'MqttService.sendDiscoveryResponse';
-    const responseTopic = `cnc-granel/discovery/${uuid}/response`;
+  private broadcastServerOnline(): void {
+    const context = 'MqttService.broadcastServerOnline';
 
     if (!this.client || !this.isConnected) {
       this.loggingService.error(
-        'Cannot send discovery response: MQTT client not connected',
+        'Cannot broadcast server online: MQTT client not connected',
         undefined,
         context,
       );
       return;
     }
 
-    const responseJson = JSON.stringify(response);
-
-    this.client.publish(responseTopic, responseJson, { qos: 1 }, (err) => {
-      if (err) {
-        this.loggingService.error(
-          `Failed to publish discovery response to ${responseTopic}`,
-          err.stack,
-          context,
-        );
-      } else {
-        this.loggingService.debug(
-          `Sent discovery response to ${responseTopic}: ${responseJson}`,
-          context,
-        );
-      }
+    const message = JSON.stringify({
+      server_ip: this.getLocalIPAddress(),
+      server_port: this.serverPort,
+      status: 'online',
+      timestamp: new Date().toISOString(),
     });
+
+    this.client.publish(
+      MQTT_TOPICS.SERVER.ONLINE,
+      message,
+      { qos: 1 },
+      (err) => {
+        if (err) {
+          this.loggingService.error(
+            `Failed to broadcast server online to ${MQTT_TOPICS.SERVER.ONLINE}`,
+            err.stack,
+            context,
+          );
+        } else {
+          this.loggingService.log(
+            `Broadcasted server online to ${MQTT_TOPICS.SERVER.ONLINE}`,
+            context,
+          );
+        }
+      },
+    );
   }
 
   private getLocalIPAddress(): string {
@@ -295,11 +359,7 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
 
       for (const address of addresses) {
         // Preferir IPv4, no loopback, no internal
-        if (
-          address.family === 'IPv4' &&
-          !address.internal &&
-          address.address
-        ) {
+        if (address.family === 'IPv4' && !address.internal && address.address) {
           return address.address;
         }
       }
@@ -324,11 +384,38 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
   }
 
   public isMqttConnected(): boolean {
-    return this.isConnected;
+    // Verificar el estado real del cliente (más confiable que el flag)
+    if (!this.client) {
+      return false;
+    }
+
+    // El cliente MQTT tiene una propiedad connected que es la fuente de verdad
+    // Verificar si existe la propiedad connected
+    let actuallyConnected = false;
+    if (typeof (this.client as any).connected === 'boolean') {
+      actuallyConnected = (this.client as any).connected;
+    } else {
+      // Fallback: verificar si el cliente está en estado de conexión
+      // El cliente puede estar conectado aunque la propiedad no esté disponible
+      actuallyConnected = this.isConnected;
+    }
+
+    // Sincronizar el flag interno con el estado real del cliente
+    if (this.isConnected !== actuallyConnected) {
+      this.isConnected = actuallyConnected;
+    }
+
+    return actuallyConnected;
   }
 
-  public publish(topic: string, message: string, options?: mqtt.IClientPublishOptions): void {
-    if (!this.client || !this.isConnected) {
+  public publish(
+    topic: string,
+    message: string,
+    options?: mqtt.IClientPublishOptions,
+  ): void {
+    // Verificar el estado real de conexión
+    const isConnected = this.isMqttConnected();
+    if (!this.client || !isConnected) {
       this.loggingService.warn(
         `Cannot publish to ${topic}: MQTT client not connected`,
         'MqttService.publish',
@@ -347,4 +434,3 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     });
   }
 }
-

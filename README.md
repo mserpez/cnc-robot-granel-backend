@@ -34,12 +34,11 @@ El backend implementa un sistema de discovery que permite a los dispositivos Ard
 
 1. **UDP Discovery**: Los dispositivos envían un broadcast UDP al puerto `UDP_DISCOVERY_PORT` con el mensaje `"CNC_GRANEL_DISCOVERY"`. El backend responde con la información del broker MQTT.
 
-2. **MQTT Discovery**: Una vez conectados al broker MQTT, los dispositivos publican en `cnc-granel/discovery/{uuid}` y el backend responde en `cnc-granel/discovery/{uuid}/response` con la información del servidor.
+2. **MQTT Discovery**: Una vez conectados al broker MQTT, los dispositivos publican en `cnc-granel/discovery` con `deviceId` en el payload JSON. El backend registra el dispositivo (sin respuesta).
 
 ## Estructura de Topics MQTT
 
-- `cnc-granel/discovery/{uuid}` - Device publica aquí para discovery
-- `cnc-granel/discovery/{uuid}/response` - Backend responde aquí
+- `cnc-granel/discovery` - Device publica aquí para discovery (deviceId en payload JSON)
 - `cnc-granel/{uuid}/heartbeat` - Heartbeat del device (futuro)
 - `cnc-granel/{uuid}/config` - Configuración del device (futuro)
 - `cnc-granel/{uuid}/component/+/command` - Comandos a componentes (futuro)

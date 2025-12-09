@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import {
+  DashboardModule,
   DiscoveryModule,
   LoggingModule,
   MqttModule,
@@ -11,8 +12,8 @@ import {
 import {
   HardwareCommunicationModule,
   IntakeOrdersModule,
-  PrepareOrdersModule,
   MotorMovementsModule,
+  PrepareOrdersModule,
 } from './modules';
 import { PrismaModule } from './prisma/prisma.module';
 
@@ -28,6 +29,7 @@ import { PrismaModule } from './prisma/prisma.module';
     SystemModule,
     DiscoveryModule,
     MqttModule,
+    DashboardModule,
     IntakeOrdersModule,
     PrepareOrdersModule,
     MotorMovementsModule,
