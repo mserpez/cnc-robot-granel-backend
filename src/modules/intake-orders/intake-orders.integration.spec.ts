@@ -2,7 +2,7 @@ import { Job, Queue } from 'bullmq';
 import Redis from 'ioredis-mock';
 import { ORDER_INTAKE_QUEUE } from '../../constants';
 import type { LoggingService } from '../../core';
-import type { QueueService } from '../../core/queue/queue.service';
+import type { QueueService } from '../../core/infrastructure/queue/queue.service';
 import type { PrepareOrderJobPayload } from '../prepare-orders';
 import { IntakeOrdersQueueService } from './intake-orders-queue.service';
 import { IntakeOrdersService } from './intake-orders.service';

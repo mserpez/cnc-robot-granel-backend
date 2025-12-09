@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Subject } from 'rxjs';
-import { LoggingService } from '../logging/logging.service';
+import { LoggingService } from '../../infrastructure/logging/logging.service';
 import { DeviceRepository } from './device.repository';
 import type { DeviceEntity, DeviceInfo } from './device.types';
 
@@ -135,14 +135,20 @@ export class DeviceService {
         return;
       }
 
-      // No actualizamos lastSeenOnlineAt porque queremos mantener el timestamp real
-      // El estado offline se calculará automáticamente en toDeviceInfo
-      // LWT solo se publica en desconexiones inesperadas, así que el dispositivo estaba online
-      const deviceInfo = this.toDeviceInfo(entity);
+      // Actualizar lastSeenOnlineAt a un tiempo que garantice que aparezca como offline inmediatamente
+      // Restamos el timeout + 1 segundo para asegurar que el cálculo de toDeviceInfo lo marque como offline
+      const disconnectedTime = new Date(
+        Date.now() - this.HEARTBEAT_TIMEOUT_MS - 1000,
+      );
 
-      // Emitir evento de desconexión
-      // El LWT indica que hubo una desconexión inesperada, así que emitimos el evento
-      this.deviceUpdates$.next({ type: 'disconnected', device: deviceInfo });
+      await this.deviceRepository.updateLastSeen(uuid, disconnectedTime);
+
+      // Obtener el dispositivo actualizado y emitir evento
+      const updatedEntity = await this.deviceRepository.findByUuid(uuid);
+      if (updatedEntity) {
+        const deviceInfo = this.toDeviceInfo(updatedEntity);
+        this.deviceUpdates$.next({ type: 'disconnected', device: deviceInfo });
+      }
 
       this.loggingService.log(
         `Device ${uuid} marked as disconnected (LWT)`,
@@ -151,6 +157,27 @@ export class DeviceService {
     } catch (error) {
       this.loggingService.error(
         `Error marking device ${uuid} as disconnected`,
+        (error as Error).stack,
+        context,
+      );
+    }
+  }
+
+  /**
+   * Actualiza el último RTT de ping de un dispositivo
+   */
+  async updateLastPingRtt(uuid: string, rtt: number): Promise<void> {
+    const context = 'DeviceService.updateLastPingRtt';
+
+    try {
+      await this.deviceRepository.updateLastPingRtt(uuid, rtt);
+      this.loggingService.debug(
+        `Updated ping RTT for device ${uuid}: ${rtt}ms`,
+        context,
+      );
+    } catch (error) {
+      this.loggingService.error(
+        `Error updating ping RTT for device ${uuid}`,
         (error as Error).stack,
         context,
       );

@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DeviceService } from '../device/device.service';
-import { LoggingService } from '../logging/logging.service';
-import { ServerService } from '../server/server.service';
+import { DeviceService } from '../../domain/device/device.service';
+import { ServerService } from '../../domain/server/server.service';
+import { LoggingService } from '../../infrastructure/logging/logging.service';
 import type { DashboardStatus } from './dashboard.types';
 
 @Injectable()

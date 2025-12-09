@@ -1,8 +1,9 @@
-import { Controller, Get, Res, Sse } from '@nestjs/common';
+import { Controller, Get, Param, Post, Res, Sse } from '@nestjs/common';
 import type { Response } from 'express';
-import { startWith, switchMap } from 'rxjs';
-import { DeviceService } from '../device/device.service';
-import { LoggingService } from '../logging/logging.service';
+import { mergeMap, startWith } from 'rxjs';
+import { DeviceService } from '../../domain/device/device.service';
+import { LoggingService } from '../../infrastructure/logging/logging.service';
+import { MqttService } from '../../infrastructure/mqtt/mqtt.service';
 import { DashboardService } from './dashboard.service';
 import type { DashboardStatus } from './dashboard.types';
 
@@ -11,6 +12,7 @@ export class DashboardController {
   constructor(
     private readonly dashboardService: DashboardService,
     private readonly deviceService: DeviceService,
+    private readonly mqttService: MqttService,
     private readonly loggingService: LoggingService,
   ) {}
 
@@ -32,6 +34,47 @@ export class DashboardController {
         context,
       );
       res.status(500).send('<h1>Error loading dashboard</h1>');
+    }
+  }
+
+  @Post('devices/:uuid/ping')
+  async pingDevice(
+    @Param('uuid') uuid: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const context = 'DashboardController.pingDevice';
+
+    try {
+      // Validar que el dispositivo existe
+      const device = await this.deviceService.getDevice(uuid);
+      if (!device) {
+        res.status(404).json({
+          success: false,
+          error: 'Device not found',
+        });
+        return;
+      }
+
+      // Enviar ping y esperar respuesta
+      const rtt = await this.mqttService.pingDevice(uuid, 3000);
+
+      res.json({
+        success: true,
+        rtt,
+      });
+    } catch (error) {
+      this.loggingService.error(
+        `Error pinging device ${uuid}`,
+        error instanceof Error ? error.stack : String(error),
+        context,
+      );
+
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      res.status(500).json({
+        success: false,
+        error: errorMessage,
+      });
     }
   }
 
@@ -223,6 +266,40 @@ export class DashboardController {
         
         .refresh-btn:hover {
             transform: rotate(180deg);
+        }
+        
+        .ping-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: background 0.2s;
+        }
+        
+        .ping-btn:hover:not(:disabled) {
+            background: #0056b3;
+        }
+        
+        .ping-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .ping-result {
+            margin-left: 8px;
+            font-size: 0.9em;
+            font-weight: 500;
+        }
+        
+        .ping-result.success {
+            color: #28a745;
+        }
+        
+        .ping-result.error {
+            color: #dc3545;
             }
             
             .header h1 {
@@ -314,17 +391,24 @@ export class DashboardController {
                             <th>IP</th>
                             <th>Status</th>
                             <th>Last Seen</th>
+                            <th>Ping</th>
                         </tr>
                     </thead>
                     <tbody id="devices-tbody">
                         ${status.devices.list
                           .map(
                             (device: any) => `
-                            <tr>
+                            <tr data-uuid="${device.uuid}">
                                 <td><code>${device.uuid}</code></td>
                                 <td>${device.ip || 'N/A'}</td>
                                 <td>${getStatusBadge(device.status === 'online')}</td>
                                 <td>${formatDate(device.lastSeen)}</td>
+                                <td>
+                                    <button class="ping-btn" data-uuid="${device.uuid}">
+                                        Ping
+                                    </button>
+                                    <span class="ping-result" id="ping-result-${device.uuid}"></span>
+                                </td>
                             </tr>
                         `,
                           )
@@ -347,6 +431,53 @@ export class DashboardController {
     </button>
     
     <script>
+        // Definir función pingDevice antes de usarla
+        async function pingDevice(uuid) {
+            const button = document.querySelector(\`button[data-uuid="\${uuid}"]\`);
+            const resultSpan = document.getElementById(\`ping-result-\${uuid}\`);
+            
+            if (!button || !resultSpan) {
+                return;
+            }
+            
+            // Deshabilitar botón y mostrar loading
+            button.disabled = true;
+            resultSpan.textContent = '...';
+            resultSpan.className = 'ping-result';
+            
+            try {
+                const response = await fetch(\`/dashboard/devices/\${uuid}/ping\`, {
+                    method: 'POST',
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultSpan.textContent = \`\${data.rtt}ms\`;
+                    resultSpan.className = 'ping-result success';
+                } else {
+                    resultSpan.textContent = data.error || 'Error';
+                    resultSpan.className = 'ping-result error';
+                }
+            } catch (error) {
+                resultSpan.textContent = 'Error: ' + (error.message || 'Unknown error');
+                resultSpan.className = 'ping-result error';
+            } finally {
+                button.disabled = false;
+            }
+        }
+        
+        // Event delegation para botones ping (evita CSP issues con onclick inline)
+        // Usar event delegation para manejar clicks en botones existentes y futuros
+        document.addEventListener('click', function(e) {
+            if (e.target && e.target.classList.contains('ping-btn')) {
+                const uuid = e.target.getAttribute('data-uuid');
+                if (uuid) {
+                    pingDevice(uuid);
+                }
+            }
+        });
+        
         // Conectar a Server-Sent Events para actualizaciones en tiempo real
         const eventSource = new EventSource('/dashboard/events');
         const devicesCard = document.querySelector('.card:last-child');
@@ -407,6 +538,7 @@ export class DashboardController {
                                 <th>IP</th>
                                 <th>Status</th>
                                 <th>Last Seen</th>
+                                <th>Ping</th>
                             </tr>
                         </thead>
                         <tbody id="devices-tbody"></tbody>
@@ -417,11 +549,17 @@ export class DashboardController {
                 const newTbody = document.getElementById('devices-tbody');
                 if (newTbody) {
                     newTbody.innerHTML = devices.map(device => \`
-                        <tr>
+                        <tr data-uuid="\${device.uuid}">
                             <td><code>\${device.uuid}</code></td>
                             <td>\${device.ip || 'N/A'}</td>
                             <td>\${getStatusBadge(device.status === 'online')}</td>
                             <td>\${formatDate(device.lastSeen)}</td>
+                            <td>
+                                <button class="ping-btn" data-uuid="\${device.uuid}">
+                                    Ping
+                                </button>
+                                <span class="ping-result" id="ping-result-\${device.uuid}"></span>
+                            </td>
                         </tr>
                     \`).join('');
                 }
@@ -448,23 +586,16 @@ export class DashboardController {
   }
 
   @Sse('events')
-  async sse(): Promise<any> {
+  sse() {
     const context = 'DashboardController.sse';
     this.loggingService.log('SSE connection established', context);
 
     // Escuchar actualizaciones de dispositivos en tiempo real
     const deviceUpdates$ = this.deviceService.getDeviceUpdates();
 
-    // Enviar estado inicial inmediatamente
-    const initialDevices = await this.deviceService.getDevices();
-    this.loggingService.log(
-      `SSE connection established with ${initialDevices.length} existing devices`,
-      context,
-    );
-
     return deviceUpdates$.pipe(
       startWith({ type: 'initial', device: null } as any), // Enviar estado inicial primero
-      switchMap(async (update) => {
+      mergeMap(async (update) => {
         const devices = await this.deviceService.getDevices();
         return {
           data: JSON.stringify({

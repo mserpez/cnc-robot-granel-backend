@@ -9,7 +9,6 @@ import {
   SystemModule,
 } from './core';
 import {
-  HardwareCommunicationModule,
   IntakeOrdersModule,
   MotorMovementsModule,
   PrepareOrdersModule,
@@ -31,7 +30,6 @@ import { PrismaModule } from './prisma/prisma.module';
     IntakeOrdersModule,
     PrepareOrdersModule,
     MotorMovementsModule,
-    HardwareCommunicationModule,
   ],
 })
 export class AppModule {}

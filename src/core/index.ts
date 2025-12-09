@@ -1,8 +1,13 @@
-export * from './dashboard';
-export * from './device';
-export * from './logging';
-export * from './mqtt';
-export * from './queue';
-export * from './security';
-export * from './server';
-export * from './system';
+// Infrastructure
+export * from './infrastructure/logging';
+export * from './infrastructure/mqtt';
+export * from './infrastructure/queue';
+export * from './infrastructure/security';
+export * from './infrastructure/system';
+
+// Domain
+export * from './domain/device';
+export * from './domain/server';
+
+// Presentation
+export * from './presentation/dashboard';

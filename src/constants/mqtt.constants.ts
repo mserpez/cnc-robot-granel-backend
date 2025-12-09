@@ -43,6 +43,10 @@ export const MQTT_TOPICS = {
     // Pattern to subscribe to all commands for a device
     commandPattern: (uuid: DeviceUuid): string =>
       `${MQTT_BASE_PREFIX}/${uuid}/component/+/command`,
+    // Build ping topic for a device
+    ping: (uuid: DeviceUuid): string => `${MQTT_BASE_PREFIX}/${uuid}/ping`,
+    // Build pong topic for a device
+    pong: (uuid: DeviceUuid): string => `${MQTT_BASE_PREFIX}/${uuid}/pong`,
   },
 } as const;
 

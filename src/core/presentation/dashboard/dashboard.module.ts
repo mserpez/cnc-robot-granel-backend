@@ -1,8 +1,8 @@
 import { Module, forwardRef } from '@nestjs/common';
-import { DeviceModule } from '../device/device.module';
-import { LoggingModule } from '../logging/logging.module';
-import { MqttModule } from '../mqtt/mqtt.module';
-import { ServerModule } from '../server/server.module';
+import { DeviceModule } from '../../domain/device/device.module';
+import { ServerModule } from '../../domain/server/server.module';
+import { LoggingModule } from '../../infrastructure/logging/logging.module';
+import { MqttModule } from '../../infrastructure/mqtt/mqtt.module';
 import { DashboardController } from './dashboard.controller';
 import { DashboardService } from './dashboard.service';
 

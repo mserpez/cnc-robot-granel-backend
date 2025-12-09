@@ -1,11 +1,16 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { randomUUID } from 'crypto';
 import * as mqtt from 'mqtt';
 import * as os from 'os';
-import { MQTT_TOPICS, SERVER_DEVICE_ID } from '../../constants';
-import { DeviceService } from '../device/device.service';
+import { MQTT_TOPICS, SERVER_DEVICE_ID } from '../../../constants';
+import { DeviceService } from '../../domain/device/device.service';
 import { LoggingService } from '../logging/logging.service';
-import type { DisconnectionMessage, DiscoveryMessage } from './mqtt.types';
+import type {
+  DisconnectionMessage,
+  DiscoveryMessage,
+  PongMessage,
+} from './mqtt.types';
 
 @Injectable()
 export class MqttService implements OnModuleInit, OnModuleDestroy {
@@ -20,6 +25,17 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
   private connectionErrorCount = 0;
   private lastErrorLogTime = 0;
   private readonly ERROR_LOG_INTERVAL_MS = 30000; // Log error cada 30 segundos máximo
+
+  // Ping/Pong tracking
+  private readonly pendingPings = new Map<
+    string,
+    {
+      resolve: (rtt: number) => void;
+      reject: (error: Error) => void;
+      timeout: NodeJS.Timeout;
+    }
+  >();
+  private readonly subscribedPongDevices = new Set<string>(); // UUIDs de dispositivos suscritos a pong
 
   constructor(
     private readonly configService: ConfigService,
@@ -272,6 +288,17 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
         const payload: DisconnectionMessage = JSON.parse(messageStr);
         this.handleDisconnection(payload);
       }
+      // Procesar pong messages (respuesta a ping)
+      // Topic: 'cnc-granel/{uuid}/pong'
+      else if (topic.startsWith(MQTT_TOPICS.DEVICE.PREFIX)) {
+        const pongTopic = topic.replace(MQTT_TOPICS.DEVICE.PREFIX, '');
+        const parts = pongTopic.split('/');
+        if (parts.length === 2 && parts[1] === 'pong') {
+          const uuid = parts[0];
+          const payload: PongMessage = JSON.parse(messageStr);
+          this.handlePong(payload, uuid);
+        }
+      }
     } catch (error) {
       this.loggingService.error(
         `Error handling MQTT message on topic ${topic}`,
@@ -523,6 +550,167 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
           'MqttService.publish',
         );
       }
+    });
+  }
+
+  /**
+   * Suscribe a los mensajes pong de un dispositivo
+   */
+  private subscribeToDevicePongs(uuid: string): void {
+    const context = 'MqttService.subscribeToDevicePongs';
+
+    // Si ya está suscrito, no hacer nada
+    if (this.subscribedPongDevices.has(uuid)) {
+      return;
+    }
+
+    if (!this.client || !this.isConnected) {
+      this.loggingService.error(
+        'Cannot subscribe: MQTT client not connected',
+        undefined,
+        context,
+      );
+      return;
+    }
+
+    const pongTopic = MQTT_TOPICS.DEVICE.pong(uuid);
+    this.client.subscribe(pongTopic, (err) => {
+      if (err) {
+        this.loggingService.error(
+          `Failed to subscribe to ${pongTopic}`,
+          err.stack,
+          context,
+        );
+      } else {
+        this.subscribedPongDevices.add(uuid);
+        this.loggingService.debug(`Subscribed to ${pongTopic}`, context);
+      }
+    });
+  }
+
+  /**
+   * Resuscribe a todos los pongs después de reconexión
+   */
+  private resubscribeToPongs(): void {
+    const context = 'MqttService.resubscribeToPongs';
+    const devices = Array.from(this.subscribedPongDevices);
+    this.subscribedPongDevices.clear();
+
+    for (const uuid of devices) {
+      this.subscribeToDevicePongs(uuid);
+    }
+
+    if (devices.length > 0) {
+      this.loggingService.debug(
+        `Resubscribed to ${devices.length} device pong topics`,
+        context,
+      );
+    }
+  }
+
+  /**
+   * Maneja mensajes pong recibidos
+   */
+  private handlePong(message: PongMessage, uuid: string): void {
+    const context = 'MqttService.handlePong';
+
+    const pending = this.pendingPings.get(message.requestId);
+    if (!pending) {
+      this.loggingService.warn(
+        `Received pong with unknown requestId: ${message.requestId}`,
+        context,
+      );
+      return;
+    }
+
+    // Limpiar timeout
+    clearTimeout(pending.timeout);
+    this.pendingPings.delete(message.requestId);
+
+    // Calcular RTT
+    const now = Date.now();
+    const rtt = now - message.timestamp;
+
+    this.loggingService.debug(
+      `Received pong from device ${uuid}, RTT: ${rtt}ms`,
+      context,
+    );
+
+    // Guardar RTT en la base de datos (async, no bloquea)
+    this.deviceService.updateLastPingRtt(uuid, rtt).catch((error) => {
+      this.loggingService.error(
+        `Error saving ping RTT for device ${uuid}`,
+        (error as Error).stack,
+        context,
+      );
+    });
+
+    // Resolver la Promise
+    pending.resolve(rtt);
+  }
+
+  /**
+   * Envía un ping a un dispositivo y espera la respuesta
+   * @param uuid UUID del dispositivo
+   * @param timeoutMs Timeout en milisegundos (default: 3000)
+   * @returns Promise que se resuelve con el RTT en milisegundos
+   */
+  public async pingDevice(
+    uuid: string,
+    timeoutMs: number = 3000,
+  ): Promise<number> {
+    const context = 'MqttService.pingDevice';
+
+    if (!this.client || !this.isConnected) {
+      throw new Error('MQTT client not connected');
+    }
+
+    // Generar requestId único
+    const requestId = randomUUID();
+    const timestamp = Date.now();
+
+    // Crear Promise con timeout
+    return new Promise<number>((resolve, reject) => {
+      // Configurar timeout
+      const timeout = setTimeout(() => {
+        this.pendingPings.delete(requestId);
+        reject(new Error('Timeout'));
+      }, timeoutMs);
+
+      // Guardar Promise resolver
+      this.pendingPings.set(requestId, {
+        resolve,
+        reject,
+        timeout,
+      });
+
+      // Suscribirse a pong si no está suscrito
+      this.subscribeToDevicePongs(uuid);
+
+      // Publicar ping
+      const pingTopic = MQTT_TOPICS.DEVICE.ping(uuid);
+      const pingMessage: { requestId: string; timestamp: number } = {
+        requestId,
+        timestamp,
+      };
+
+      this.client!.publish(
+        pingTopic,
+        JSON.stringify(pingMessage),
+        { qos: 1 },
+        (err) => {
+          if (err) {
+            clearTimeout(timeout);
+            this.pendingPings.delete(requestId);
+            reject(new Error(`Failed to publish ping: ${err.message}`));
+          } else {
+            this.loggingService.debug(
+              `Published ping to device ${uuid} (requestId: ${requestId})`,
+              context,
+            );
+          }
+        },
+      );
     });
   }
 }

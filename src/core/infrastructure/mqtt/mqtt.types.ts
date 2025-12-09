@@ -1,4 +1,4 @@
-import type { DeviceId } from '../../constants/mqtt.constants';
+import type { DeviceId } from '../../../constants/mqtt.constants';
 
 /**
  * Discovery Message
@@ -50,6 +50,24 @@ export interface HeartbeatMessage {
 }
 
 /**
+ * Ping Message
+ * Enviado por el backend para verificar comunicación con un dispositivo
+ */
+export interface PingMessage {
+  requestId: string; // UUID para correlacionar respuesta
+  timestamp: number; // Timestamp del servidor en ms
+}
+
+/**
+ * Pong Message
+ * Respuesta del dispositivo al ping
+ */
+export interface PongMessage {
+  requestId: string; // Mismo que el ping
+  timestamp: number; // Timestamp del servidor original (para calcular RTT)
+}
+
+/**
  * Topic Types con Payloads Tipados
  * Mapea cada topic a su tipo de payload
  */
@@ -59,6 +77,8 @@ export type TopicPayloadMap = {
   'cnc-granel/{uuid}/config': ConfigMessage;
   'cnc-granel/{uuid}/heartbeat': HeartbeatMessage;
   'cnc-granel/{uuid}/component/{component}/command': CommandMessage;
+  'cnc-granel/{uuid}/ping': PingMessage;
+  'cnc-granel/{uuid}/pong': PongMessage;
 };
 
 /**

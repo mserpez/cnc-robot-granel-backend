@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
+import { PrismaService } from '../../../prisma/prisma.service';
 import type { DeviceEntity } from './device.types';
 
 @Injectable()
@@ -67,6 +67,16 @@ export class DeviceRepository {
     return this.prisma.device.update({
       where: { uuid },
       data: { lastSeenOnlineAt },
+    });
+  }
+
+  /**
+   * Actualizar último RTT de ping
+   */
+  async updateLastPingRtt(uuid: string, rtt: number): Promise<DeviceEntity> {
+    return this.prisma.device.update({
+      where: { uuid },
+      data: { lastPingRtt: rtt },
     });
   }
 }

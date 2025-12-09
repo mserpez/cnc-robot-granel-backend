@@ -2,8 +2,7 @@ import { Job, Queue } from 'bullmq';
 import Redis from 'ioredis-mock';
 import { ORDER_PREPARE_QUEUE } from '../../constants';
 import type { LoggingService } from '../../core';
-import type { QueueService } from '../../core/queue/queue.service';
-import type { HardwareCommunicationService } from '../hardware-communication';
+import type { QueueService } from '../../core/infrastructure/queue/queue.service';
 import type { MotorMovementsService } from '../motor-movements';
 import { PrepareOrdersQueueService } from './prepare-orders-queue.service';
 import { PrepareOrdersService } from './prepare-orders.service';
@@ -63,7 +62,7 @@ describe('PrepareOrdersService enqueue integration', () => {
     } as unknown as MotorMovementsService;
     const hardwareStub = {
       getCurrentWeight: jest.fn(),
-    } as unknown as HardwareCommunicationService;
+    };
 
     service = new PrepareOrdersService(
       prepareQueueService,

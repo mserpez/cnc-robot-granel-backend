@@ -19,6 +19,7 @@ model Device {
   ip               String?
   firmwareVersion  String
   boardName        String
+  lastPingRtt      Int?     // RTT del último ping en milisegundos
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

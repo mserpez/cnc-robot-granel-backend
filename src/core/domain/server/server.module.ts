@@ -1,8 +1,8 @@
 import { Module, forwardRef } from '@nestjs/common';
-import { PrismaModule } from '../../prisma/prisma.module';
-import { LoggingModule } from '../logging/logging.module';
-import { MqttModule } from '../mqtt/mqtt.module';
-import { QueueModule } from '../queue/queue.module';
+import { PrismaModule } from '../../../prisma/prisma.module';
+import { LoggingModule } from '../../infrastructure/logging/logging.module';
+import { MqttModule } from '../../infrastructure/mqtt/mqtt.module';
+import { QueueModule } from '../../infrastructure/queue/queue.module';
 import { ServerService } from './server.service';
 
 @Module({
@@ -16,4 +16,3 @@ import { ServerService } from './server.service';
   exports: [ServerService],
 })
 export class ServerModule {}
-

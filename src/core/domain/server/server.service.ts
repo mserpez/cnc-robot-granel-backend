@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PrismaService } from '../../prisma/prisma.service';
-import { LoggingService } from '../logging/logging.service';
-import { MqttService } from '../mqtt/mqtt.service';
-import { QueueService } from '../queue/queue.service';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { LoggingService } from '../../infrastructure/logging/logging.service';
+import { MqttService } from '../../infrastructure/mqtt/mqtt.service';
+import { QueueService } from '../../infrastructure/queue/queue.service';
 import type {
   DatabaseInfo,
   MqttInfo,
@@ -199,4 +199,3 @@ export class ServerService {
     };
   }
 }
-

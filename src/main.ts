@@ -13,7 +13,22 @@ async function bootstrap(): Promise<void> {
   loggingService.debug('Starting application bootstrap', 'Bootstrap');
 
   app.useLogger(loggingService);
-  app.use(helmet());
+  
+  // Configurar helmet con CSP que permita scripts inline para el dashboard
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'", "'unsafe-inline'"], // Permitir scripts inline para el dashboard
+          styleSrc: ["'self'", "'unsafe-inline'"], // Permitir estilos inline
+          imgSrc: ["'self'", 'data:', 'https:'],
+          connectSrc: ["'self'"],
+        },
+      },
+    }),
+  );
+  
   app.enableShutdownHooks();
 
   const bullBoardService = app.get<BullBoardService>(BullBoardService);

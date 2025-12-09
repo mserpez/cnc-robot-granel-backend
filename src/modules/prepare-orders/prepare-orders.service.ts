@@ -2,11 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { JobsOptions, Queue } from 'bullmq';
 import { ORDER_PREPARE_QUEUE } from '../../constants';
 import { LoggingService } from '../../core';
-import {
-  HardwareCommunicationService,
-  MOTOR_COMMAND_KEYS,
-} from '../hardware-communication';
-import { MotorMovementsService } from '../motor-movements';
+import { MOTOR_COMMAND_KEYS, MotorMovementsService } from '../motor-movements';
 import { PrepareOrdersQueueService } from './prepare-orders-queue.service';
 import type { PrepareOrderJobPayload } from './prepare-orders.types';
 
@@ -17,7 +13,6 @@ export class PrepareOrdersService {
   constructor(
     private readonly queueService: PrepareOrdersQueueService,
     private readonly motorMovements: MotorMovementsService,
-    private readonly hardware: HardwareCommunicationService,
     private readonly loggingService: LoggingService,
   ) {}
 
@@ -137,7 +132,9 @@ export class PrepareOrdersService {
 
       const rotationsNeeded = toDispense / weightPerTurn;
       await this.rotateAndMeasure(rotationsNeeded, `phase-${phase}`);
-      dispensed = await this.hardware.getCurrentWeight();
+
+      dispensed = 0; // TODO: Get the weight from the hardware
+
       this.loggingService.debug(
         `Dispensed ${dispensed.toFixed(2)}g / ${targetWeight}g`,
         context,
@@ -158,7 +155,7 @@ export class PrepareOrdersService {
     await this.motorMovements.enqueueCommand({
       command: MOTOR_COMMAND_KEYS.MOVE_X_TO_RIGHT,
     });
-    await this.hardware.tareScale();
+    // TODO: Tare the scale
   }
 
   private async rotateAndMeasure(
@@ -170,7 +167,7 @@ export class PrepareOrdersService {
       command: MOTOR_COMMAND_KEYS.MOVE_Z_RIGHT_ROTATION,
       params: { rotations },
     });
-    const weight = await this.hardware.getCurrentWeight();
+    const weight = 0; // TODO: Get the weight from the hardware
     this.loggingService.debug(`${label}: measured ${weight}g`, context);
     return weight;
   }
@@ -184,7 +181,7 @@ export class PrepareOrdersService {
     const maxRetries = 5;
     for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 2_000));
-      const weight = await this.hardware.getCurrentWeight();
+      const weight = 0; // TODO: Get the weight from the hardware
 
       if (weight <= 0) {
         this.loggingService.debug(
