@@ -1,6 +1,5 @@
 export * from './dashboard';
 export * from './device';
-export * from './discovery';
 export * from './logging';
 export * from './mqtt';
 export * from './queue';

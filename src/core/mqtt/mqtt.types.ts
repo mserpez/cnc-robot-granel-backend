@@ -62,12 +62,3 @@ export interface TypedMqttMessage<T extends keyof TopicPayloadMap> {
   payload: TopicPayloadMap[T];
   timestamp: Date;
 }
-
-/**
- * @deprecated Use TypedMqttMessage instead
- */
-export interface MqttMessage<T = unknown> {
-  topic: string;
-  payload: T;
-  timestamp: Date;
-}
