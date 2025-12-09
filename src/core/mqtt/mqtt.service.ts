@@ -5,7 +5,7 @@ import * as os from 'os';
 import { MQTT_TOPICS, SERVER_DEVICE_ID } from '../../constants';
 import { DeviceService } from '../device/device.service';
 import { LoggingService } from '../logging/logging.service';
-import type { DiscoveryMessage } from './mqtt.types';
+import type { DisconnectionMessage, DiscoveryMessage } from './mqtt.types';
 
 @Injectable()
 export class MqttService implements OnModuleInit, OnModuleDestroy {
@@ -109,6 +109,7 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
       );
       // Resubscribirse después de reconexión
       this.subscribeToDiscovery();
+      this.subscribeToDisconnections();
       // Enviar broadcast para que dispositivos se reconecten
       this.broadcastServerOnline();
     });
@@ -221,6 +222,34 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  private subscribeToDisconnections(): void {
+    const context = 'MqttService.subscribeToDisconnections';
+
+    if (!this.client || !this.isConnected) {
+      this.loggingService.error(
+        'Cannot subscribe: MQTT client not connected',
+        undefined,
+        context,
+      );
+      return;
+    }
+
+    this.client.subscribe(MQTT_TOPICS.DISCONNECTED.TOPIC, (err) => {
+      if (err) {
+        this.loggingService.error(
+          `Failed to subscribe to ${MQTT_TOPICS.DISCONNECTED.TOPIC}`,
+          err.stack,
+          context,
+        );
+      } else {
+        this.loggingService.log(
+          `Subscribed to ${MQTT_TOPICS.DISCONNECTED.TOPIC}`,
+          context,
+        );
+      }
+    });
+  }
+
   private handleMessage(topic: string, message: Buffer): void {
     const context = 'MqttService.handleMessage';
 
@@ -236,6 +265,12 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
       if (topic === MQTT_TOPICS.DISCOVERY.TOPIC) {
         const payload: DiscoveryMessage = JSON.parse(messageStr);
         this.handleDiscovery(payload);
+      }
+      // Procesar disconnection messages (LWT)
+      // Topic único: 'cnc-granel/disconnected' (deviceId viene en payload)
+      else if (topic === MQTT_TOPICS.DISCONNECTED.TOPIC) {
+        const payload: DisconnectionMessage = JSON.parse(messageStr);
+        this.handleDisconnection(payload);
       }
     } catch (error) {
       this.loggingService.error(
@@ -301,6 +336,63 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     } catch (error) {
       this.loggingService.error(
         `Error processing discovery message from ${message.deviceId}`,
+        (error as Error).stack,
+        context,
+      );
+    }
+  }
+
+  private handleDisconnection(message: DisconnectionMessage): void {
+    const context = 'MqttService.handleDisconnection';
+
+    // Ejecutar async sin bloquear
+    this.handleDisconnectionAsync(message).catch((error) => {
+      this.loggingService.error(
+        `Error processing disconnection message from ${message.deviceId}`,
+        (error as Error).stack,
+        context,
+      );
+    });
+  }
+
+  private async handleDisconnectionAsync(
+    message: DisconnectionMessage,
+  ): Promise<void> {
+    const context = 'MqttService.handleDisconnectionAsync';
+
+    try {
+      this.loggingService.log(
+        `Disconnection message from device ${message.deviceId}: ${JSON.stringify(message)}`,
+        context,
+      );
+
+      // Ignorar si es el servidor
+      if (message.deviceId === SERVER_DEVICE_ID) {
+        this.loggingService.debug(
+          'Ignoring disconnection message from server',
+          context,
+        );
+        return;
+      }
+
+      // Marcar dispositivo como desconectado
+      if (!this.deviceService) {
+        this.loggingService.error(
+          'DeviceService is not available',
+          undefined,
+          context,
+        );
+        return;
+      }
+
+      this.loggingService.log(
+        `Marking device ${message.deviceId} as disconnected (reason: ${message.reason || 'unexpected'})`,
+        context,
+      );
+      await this.deviceService.markDeviceDisconnected(message.deviceId);
+    } catch (error) {
+      this.loggingService.error(
+        `Error processing disconnection message from ${message.deviceId}`,
         (error as Error).stack,
         context,
       );

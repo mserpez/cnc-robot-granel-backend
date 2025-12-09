@@ -117,6 +117,47 @@ export class DeviceService {
   }
 
   /**
+   * Marca un dispositivo como desconectado (LWT)
+   * El LWT solo se publica cuando hay desconexión inesperada, así que asumimos que estaba online
+   * Reutiliza la misma lógica de toDeviceInfo para obtener el DeviceInfo
+   */
+  async markDeviceDisconnected(uuid: string): Promise<void> {
+    const context = 'DeviceService.markDeviceDisconnected';
+
+    try {
+      const entity = await this.deviceRepository.findByUuid(uuid);
+
+      if (!entity) {
+        this.loggingService.warn(
+          `Device ${uuid} not found, cannot mark as disconnected`,
+          context,
+        );
+        return;
+      }
+
+      // No actualizamos lastSeenOnlineAt porque queremos mantener el timestamp real
+      // El estado offline se calculará automáticamente en toDeviceInfo
+      // LWT solo se publica en desconexiones inesperadas, así que el dispositivo estaba online
+      const deviceInfo = this.toDeviceInfo(entity);
+
+      // Emitir evento de desconexión
+      // El LWT indica que hubo una desconexión inesperada, así que emitimos el evento
+      this.deviceUpdates$.next({ type: 'disconnected', device: deviceInfo });
+
+      this.loggingService.log(
+        `Device ${uuid} marked as disconnected (LWT)`,
+        context,
+      );
+    } catch (error) {
+      this.loggingService.error(
+        `Error marking device ${uuid} as disconnected`,
+        (error as Error).stack,
+        context,
+      );
+    }
+  }
+
+  /**
    * Observable para escuchar actualizaciones de dispositivos
    */
   getDeviceUpdates() {

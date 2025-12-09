@@ -21,6 +21,10 @@ export const MQTT_TOPICS = {
     // Topic único para discovery (deviceId viene en payload)
     TOPIC: `${MQTT_BASE_PREFIX}/discovery`,
   },
+  DISCONNECTED: {
+    // Topic único para LWT/disconexión (deviceId viene en payload)
+    TOPIC: `${MQTT_BASE_PREFIX}/disconnected`,
+  },
   SERVER: {
     // Server online broadcast topic
     ONLINE: `${MQTT_BASE_PREFIX}/server/online`,
@@ -31,7 +35,8 @@ export const MQTT_TOPICS = {
     // Build config topic for a device
     config: (uuid: DeviceUuid): string => `${MQTT_BASE_PREFIX}/${uuid}/config`,
     // Build heartbeat topic for a device
-    heartbeat: (uuid: DeviceUuid): string => `${MQTT_BASE_PREFIX}/${uuid}/heartbeat`,
+    heartbeat: (uuid: DeviceUuid): string =>
+      `${MQTT_BASE_PREFIX}/${uuid}/heartbeat`,
     // Build command topic for a device component
     command: (uuid: DeviceUuid, component: string): string =>
       `${MQTT_BASE_PREFIX}/${uuid}/component/${component}/command`,
@@ -53,4 +58,3 @@ export const isServerDevice = (
 export const isDeviceUuid = (deviceId: DeviceId): deviceId is DeviceUuid => {
   return deviceId !== SERVER_DEVICE_ID;
 };
-

@@ -15,6 +15,17 @@ export interface DiscoveryMessage {
 }
 
 /**
+ * Disconnection Message (LWT)
+ * Publicado automáticamente por el broker cuando un dispositivo se desconecta inesperadamente
+ * deviceId es el UUID del dispositivo que se desconectó
+ */
+export interface DisconnectionMessage {
+  deviceId: DeviceId;
+  reason?: string;
+  timestamp?: string;
+}
+
+/**
  * Config Message (futuro)
  */
 export interface ConfigMessage {
@@ -44,6 +55,7 @@ export interface HeartbeatMessage {
  */
 export type TopicPayloadMap = {
   'cnc-granel/discovery': DiscoveryMessage;
+  'cnc-granel/disconnected': DisconnectionMessage;
   'cnc-granel/{uuid}/config': ConfigMessage;
   'cnc-granel/{uuid}/heartbeat': HeartbeatMessage;
   'cnc-granel/{uuid}/component/{component}/command': CommandMessage;
