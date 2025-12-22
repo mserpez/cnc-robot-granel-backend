@@ -13,15 +13,38 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum PeripheralType {
+  LED
+}
+
 model Device {
-  uuid             String   @id
+  uuid             String       @id
   lastSeenOnlineAt DateTime
   ip               String?
   firmwareVersion  String
   boardName        String
-  lastPingRtt      Int?     // RTT del último ping en milisegundos
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  lastPingRtt      Int? // RTT del último ping en milisegundos
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  peripherals      Peripheral[]
 
   @@map("devices")
+}
+
+model Peripheral {
+  id           String         @id @default(uuid())
+  deviceUuid   String
+  componentId  String
+  type         PeripheralType
+  config       Json // { pin: number }
+  state        Json? // { on: boolean }
+  configStatus String? // null (pending), "applied" (éxito), "error" (error)
+  configError  String? // Mensaje de error cuando configStatus === "error"
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  device Device @relation(fields: [deviceUuid], references: [uuid], onDelete: Cascade)
+
+  @@unique([deviceUuid, componentId])
+  @@map("peripherals")
 }

@@ -1,0 +1,31 @@
+{
+	"id": "cnc-granel-environment",
+	"name": "CNC Granel - Development",
+	"values": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:3000",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "deviceUuid",
+			"value": "",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "componentId",
+			"value": "led1",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "port",
+			"value": "3000",
+			"type": "default",
+			"enabled": true
+		}
+	],
+	"_postman_variable_scope": "environment"
+}

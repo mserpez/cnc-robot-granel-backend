@@ -47,6 +47,15 @@ export const MQTT_TOPICS = {
     ping: (uuid: DeviceUuid): string => `${MQTT_BASE_PREFIX}/${uuid}/ping`,
     // Build pong topic for a device
     pong: (uuid: DeviceUuid): string => `${MQTT_BASE_PREFIX}/${uuid}/pong`,
+    // Build command feedback topic for a device component
+    commandFeedback: (uuid: DeviceUuid, component: string): string =>
+      `${MQTT_BASE_PREFIX}/${uuid}/component/${component}/feedback`,
+    // Pattern to subscribe to all command feedbacks for a device
+    commandFeedbackPattern: (uuid: DeviceUuid): string =>
+      `${MQTT_BASE_PREFIX}/${uuid}/component/+/feedback`,
+    // Build config feedback topic for a device
+    configFeedback: (uuid: DeviceUuid): string =>
+      `${MQTT_BASE_PREFIX}/${uuid}/config/feedback`,
   },
 } as const;
 

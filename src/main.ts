@@ -13,7 +13,7 @@ async function bootstrap(): Promise<void> {
   loggingService.debug('Starting application bootstrap', 'Bootstrap');
 
   app.useLogger(loggingService);
-  
+
   // Configurar helmet con CSP que permita scripts inline para el dashboard
   app.use(
     helmet({
@@ -28,7 +28,7 @@ async function bootstrap(): Promise<void> {
       },
     }),
   );
-  
+
   app.enableShutdownHooks();
 
   const bullBoardService = app.get<BullBoardService>(BullBoardService);

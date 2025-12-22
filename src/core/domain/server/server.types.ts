@@ -32,4 +32,3 @@ export interface ServiceHealthStatus {
     info: MqttInfo;
   };
 }
-

@@ -11,3 +11,4 @@
 - Ejecutar `npm run build` para validar el chequeo de TypeScript antes de dar una tarea por completa.
 - La lógica de negocio debe residir en servicios; los controladores solo deben delegar en servicios existentes.
 - Nunca hardcodear nombres de colas o jobs; utilizar únicamente constantes definidas en `queue.constants.ts`.
+- CRÍTICO: NO agregar código "por las dudas", fallbacks preventivos, validaciones defensivas innecesarias, o lógica "por si acaso". Solo implementar código que resuelva un problema real y actual. Si no hay un requerimiento explícito o un caso de uso real, NO agregar el código. Eliminar código existente que sea defensivo innecesario.

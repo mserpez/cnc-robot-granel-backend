@@ -26,19 +26,50 @@ export interface DisconnectionMessage {
 }
 
 /**
- * Config Message (futuro)
+ * Config Message
  */
 export interface ConfigMessage {
-  // ... estructura de configuración
+  peripherals: Array<{
+    componentId: string;
+    type: string;
+    config: Record<string, unknown>;
+  }>;
 }
 
 /**
- * Command Message (futuro)
+ * Command Message
  */
 export interface CommandMessage {
-  component: string;
   command: string;
   payload?: Record<string, unknown>;
+  requestId: string;
+  timestamp: number;
+}
+
+/**
+ * Command Feedback Message
+ * Respuesta del dispositivo confirmando ejecución de comando
+ */
+export interface CommandFeedbackMessage {
+  requestId: string;
+  status: 'success' | 'error';
+  message?: string;
+  timestamp: number;
+}
+
+/**
+ * Config Feedback Message
+ * Respuesta del dispositivo confirmando aplicación de configuración de periféricos
+ */
+export interface ConfigFeedbackMessage {
+  status: 'success' | 'error';
+  peripherals?: Array<{
+    componentId: string;
+    status: 'success' | 'error';
+    message?: string;
+  }>;
+  message?: string;
+  timestamp: number;
 }
 
 /**
@@ -75,8 +106,10 @@ export type TopicPayloadMap = {
   'cnc-granel/discovery': DiscoveryMessage;
   'cnc-granel/disconnected': DisconnectionMessage;
   'cnc-granel/{uuid}/config': ConfigMessage;
+  'cnc-granel/{uuid}/config/feedback': ConfigFeedbackMessage;
   'cnc-granel/{uuid}/heartbeat': HeartbeatMessage;
   'cnc-granel/{uuid}/component/{component}/command': CommandMessage;
+  'cnc-granel/{uuid}/component/{component}/feedback': CommandFeedbackMessage;
   'cnc-granel/{uuid}/ping': PingMessage;
   'cnc-granel/{uuid}/pong': PongMessage;
 };

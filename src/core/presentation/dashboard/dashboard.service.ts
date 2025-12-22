@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { DeviceService } from '../../domain/device/device.service';
 import { ServerService } from '../../domain/server/server.service';
 import { LoggingService } from '../../infrastructure/logging/logging.service';
+import { PeripheralCoordinatorService } from '../../peripherals/peripheral-coordinator.service';
 import type { DashboardStatus } from './dashboard.types';
 
 @Injectable()
@@ -12,6 +13,7 @@ export class DashboardService {
     private readonly configService: ConfigService,
     private readonly deviceService: DeviceService,
     private readonly serverService: ServerService,
+    private readonly peripheralCoordinatorService: PeripheralCoordinatorService,
   ) {}
 
   async getDashboardStatus(): Promise<DashboardStatus> {
@@ -48,12 +50,27 @@ export class DashboardService {
       devices: {
         connected: (await this.deviceService.getOnlineDevices()).length,
         total: (await this.deviceService.getDevices()).length,
-        list: (await this.deviceService.getDevices()).map((device) => ({
-          uuid: device.uuid,
-          status: device.status,
-          lastSeen: device.lastSeen,
-          ip: device.ip ?? undefined,
-        })),
+        list: await Promise.all(
+          (await this.deviceService.getDevices()).map(async (device) => {
+            const peripherals = await this.peripheralCoordinatorService
+              .getPeripheralsByDevice(device.uuid)
+              .catch(() => []); // Si falla, retornar array vacío
+
+            return {
+              uuid: device.uuid,
+              status: device.status,
+              lastSeen: device.lastSeen,
+              ip: device.ip ?? undefined,
+              peripherals: peripherals.map((p) => ({
+                id: p.id,
+                componentId: p.componentId,
+                type: p.type,
+                config: p.config as Record<string, unknown>,
+                state: (p.state as Record<string, unknown> | null) ?? null,
+              })),
+            };
+          }),
+        ),
       },
     };
 

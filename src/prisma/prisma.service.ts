@@ -30,8 +30,8 @@ export class PrismaService
 
   async onModuleDestroy(): Promise<void> {
     try {
-    await this.$disconnect();
-    } catch (error) {
+      await this.$disconnect();
+    } catch {
       // Ignorar errores al desconectar
     }
   }

@@ -1,0 +1,341 @@
+{
+	"info": {
+		"_postman_id": "cnc-granel-api-collection",
+		"name": "CNC Granel API",
+		"description": "API collection for CNC Granel backend - Dashboard, Peripherals, and System endpoints",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Dashboard",
+			"item": [
+				{
+					"name": "Get Dashboard Status",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/dashboard",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"dashboard"
+							]
+						},
+						"description": "Get complete dashboard status including server, database, Redis, MQTT broker status, and all devices with their peripherals."
+					},
+					"response": []
+				},
+				{
+					"name": "Ping Device",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/dashboard/devices/{{deviceUuid}}/ping",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"dashboard",
+								"devices",
+								"{{deviceUuid}}",
+								"ping"
+							]
+						},
+						"description": "Send a ping MQTT message to a device and get the Round Trip Time (RTT) in milliseconds. The device must be online."
+					},
+					"response": []
+				}
+			],
+			"description": "Dashboard endpoints for system status and device management"
+		},
+		{
+			"name": "Peripherals",
+			"item": [
+				{
+					"name": "Get Peripherals",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/peripherals/devices/{{deviceUuid}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"peripherals",
+								"devices",
+								"{{deviceUuid}}"
+							]
+						},
+						"description": "Get all configured peripherals for a specific device. Returns an array of PeripheralInfo objects."
+					},
+					"response": []
+				},
+				{
+					"name": "Create LED",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"pin\": 13\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/peripherals/devices/{{deviceUuid}}/leds/{{componentId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"peripherals",
+								"devices",
+								"{{deviceUuid}}",
+								"leds",
+								"{{componentId}}"
+							]
+						},
+						"description": "Create a new LED peripheral on a device. The configuration is sent to the Arduino via MQTT and only saved to the database after receiving success feedback. The componentId must be unique for the device and follow alphanumeric, hyphens, and underscores only (max 50 characters). Pin must be an integer between 0 and 255."
+					},
+					"response": []
+				},
+				{
+					"name": "Update LED",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"pin\": 14\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/peripherals/devices/{{deviceUuid}}/leds/{{componentId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"peripherals",
+								"devices",
+								"{{deviceUuid}}",
+								"leds",
+								"{{componentId}}"
+							]
+						},
+						"description": "Update the configuration of an existing LED peripheral. The LED must exist on the device. The configuration is sent to the Arduino via MQTT and only updated in the database after receiving success feedback."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Peripheral",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/peripherals/devices/{{deviceUuid}}/peripherals/{{componentId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"peripherals",
+								"devices",
+								"{{deviceUuid}}",
+								"peripherals",
+								"{{componentId}}"
+							]
+						},
+						"description": "Delete a peripheral from a device. The complete configuration (without the deleted peripheral) is sent to the Arduino via MQTT and only removed from the database after receiving success feedback."
+					},
+					"response": []
+				}
+			],
+			"description": "Peripheral management endpoints for configuring and managing device peripherals"
+		},
+		{
+			"name": "LED Commands",
+			"item": [
+				{
+					"name": "Send LED Command (ON)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"command\": \"on\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/peripherals/devices/{{deviceUuid}}/leds/{{componentId}}/command",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"peripherals",
+								"devices",
+								"{{deviceUuid}}",
+								"leds",
+								"{{componentId}}",
+								"command"
+							]
+						},
+						"description": "Send ON command to an LED. The command is enqueued in BullMQ (Redis), processed asynchronously by a worker, sent via MQTT to the Arduino, and the state is updated in the database after receiving feedback. The response is immediate (only confirms the command was enqueued)."
+					},
+					"response": []
+				},
+				{
+					"name": "Send LED Command (OFF)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"command\": \"off\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/peripherals/devices/{{deviceUuid}}/leds/{{componentId}}/command",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"peripherals",
+								"devices",
+								"{{deviceUuid}}",
+								"leds",
+								"{{componentId}}",
+								"command"
+							]
+						},
+						"description": "Send OFF command to an LED. The command is enqueued in BullMQ (Redis), processed asynchronously by a worker, sent via MQTT to the Arduino, and the state is updated in the database after receiving feedback. The response is immediate (only confirms the command was enqueued)."
+					},
+					"response": []
+				}
+			],
+			"description": "Commands to control LED peripherals"
+		},
+		{
+			"name": "System",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/system/health",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"system",
+								"health"
+							]
+						},
+						"description": "Get system health status including database, Redis, and MQTT broker connection status."
+					},
+					"response": []
+				}
+			],
+			"description": "System endpoints for health checks and monitoring"
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:3000",
+			"type": "string"
+		}
+	]
+}

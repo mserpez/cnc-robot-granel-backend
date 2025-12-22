@@ -3,10 +3,13 @@ import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import * as mqtt from 'mqtt';
 import * as os from 'os';
-import { MQTT_TOPICS, SERVER_DEVICE_ID } from '../../../constants';
+import { MQTT_TOPICS } from '../../../constants';
 import { DeviceService } from '../../domain/device/device.service';
 import { LoggingService } from '../logging/logging.service';
 import type {
+  CommandFeedbackMessage,
+  CommandMessage,
+  ConfigFeedbackMessage,
   DisconnectionMessage,
   DiscoveryMessage,
   PongMessage,
@@ -36,6 +39,34 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     }
   >();
   private readonly subscribedPongDevices = new Set<string>(); // UUIDs de dispositivos suscritos a pong
+
+  // Command feedback tracking
+  private readonly pendingCommands = new Map<
+    string,
+    {
+      resolve: (feedback: CommandFeedbackMessage) => void;
+      reject: (error: Error) => void;
+      timeout: NodeJS.Timeout;
+    }
+  >();
+  private readonly subscribedCommandFeedbackDevices = new Set<string>(); // UUIDs de dispositivos suscritos a feedback
+  private readonly subscribedConfigFeedbackDevices = new Set<string>(); // UUIDs de dispositivos suscritos a config feedback
+
+  // Config feedback tracking
+  private readonly pendingConfigs = new Map<
+    string, // deviceUuid
+    {
+      resolve: (feedback: ConfigFeedbackMessage) => void;
+      reject: (error: Error) => void;
+      timeout: NodeJS.Timeout;
+    }
+  >();
+
+  // Callback para config feedback (registrado por PeripheralCoordinatorService)
+  private onConfigFeedbackCallback?: (
+    message: ConfigFeedbackMessage,
+    deviceUuid: string,
+  ) => Promise<void> | void;
 
   constructor(
     private readonly configService: ConfigService,
@@ -288,6 +319,51 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
         const payload: DisconnectionMessage = JSON.parse(messageStr);
         this.handleDisconnection(payload);
       }
+      // Procesar config feedback messages (ANTES del bloque genérico de device)
+      // Topic: 'cnc-granel/{uuid}/config/feedback'
+      else if (topic.endsWith('/config/feedback')) {
+        const patternRegex = new RegExp(`^cnc-granel/([^/]+)/config/feedback$`);
+        const match = topic.match(patternRegex);
+        if (match) {
+          const uuid = match[1];
+          this.loggingService.log(
+            `Extracted UUID from config feedback topic: ${uuid}`,
+            'MqttService.handleMessage',
+          );
+          try {
+            const payload: ConfigFeedbackMessage = JSON.parse(messageStr);
+            this.loggingService.log(
+              `Parsed config feedback payload for ${uuid}, pending configs: ${Array.from(this.pendingConfigs.keys()).join(', ')}`,
+              'MqttService.handleMessage',
+            );
+            this.handleConfigFeedback(payload, uuid);
+          } catch (parseError) {
+            this.loggingService.error(
+              `Failed to parse config feedback JSON: ${(parseError as Error).message}`,
+              (parseError as Error).stack,
+              'MqttService.handleMessage',
+            );
+          }
+        } else {
+          this.loggingService.warn(
+            `Config feedback topic did not match pattern: ${topic}`,
+            'MqttService.handleMessage',
+          );
+        }
+      }
+      // Procesar command feedback messages (ANTES del bloque genérico de device)
+      // Topic: 'cnc-granel/{uuid}/component/{componentId}/feedback'
+      else if (topic.includes('/component/') && topic.endsWith('/feedback')) {
+        const patternRegex = new RegExp(
+          `^cnc-granel/([^/]+)/component/[^/]+/feedback$`,
+        );
+        const match = topic.match(patternRegex);
+        if (match) {
+          const uuid = match[1];
+          const payload: CommandFeedbackMessage = JSON.parse(messageStr);
+          this.handleCommandFeedback(payload, uuid);
+        }
+      }
       // Procesar pong messages (respuesta a ping)
       // Topic: 'cnc-granel/{uuid}/pong'
       else if (topic.startsWith(MQTT_TOPICS.DEVICE.PREFIX)) {
@@ -330,15 +406,6 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
         context,
       );
 
-      // Ignorar si es el servidor
-      if (message.deviceId === SERVER_DEVICE_ID) {
-        this.loggingService.debug(
-          'Ignoring discovery message from server',
-          context,
-        );
-        return;
-      }
-
       // Registrar dispositivo en el service
       if (!this.deviceService) {
         this.loggingService.error(
@@ -359,6 +426,9 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
         message.boardName,
         message.firmwareVersion,
       );
+
+      // Suscribirse a config feedback cuando un dispositivo se conecta
+      this.subscribeToConfigFeedback(message.deviceId);
       // No hay response - comunicación solo por MQTT
     } catch (error) {
       this.loggingService.error(
@@ -392,15 +462,6 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
         `Disconnection message from device ${message.deviceId}: ${JSON.stringify(message)}`,
         context,
       );
-
-      // Ignorar si es el servidor
-      if (message.deviceId === SERVER_DEVICE_ID) {
-        this.loggingService.debug(
-          'Ignoring disconnection message from server',
-          context,
-        );
-        return;
-      }
 
       // Marcar dispositivo como desconectado
       if (!this.deviceService) {
@@ -712,5 +773,342 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
         },
       );
     });
+  }
+
+  /**
+   * Publica un comando a un componente de un dispositivo
+   * Retorna Promise que se resuelve cuando llega el feedback
+   */
+  public async publishCommand(
+    deviceUuid: string,
+    componentId: string,
+    command: string,
+    payload?: Record<string, unknown>,
+    timeoutMs: number = 5000,
+  ): Promise<CommandFeedbackMessage> {
+    const context = 'MqttService.publishCommand';
+
+    if (!this.client || !this.isConnected) {
+      throw new Error('MQTT client not connected');
+    }
+
+    // Validar dispositivo online
+    const device = await this.deviceService.getDevice(deviceUuid);
+    if (!device || device.status !== 'online') {
+      throw new Error(`Device ${deviceUuid} is not online`);
+    }
+
+    return new Promise<CommandFeedbackMessage>((resolve, reject) => {
+      const requestId = randomUUID();
+      const timestamp = Date.now();
+
+      const commandMessage: CommandMessage = {
+        command,
+        payload,
+        requestId,
+        timestamp,
+      };
+
+      // Suscribirse a feedback si no está suscrito
+      this.subscribeToCommandFeedback(deviceUuid);
+
+      // Timeout
+      const timeout = setTimeout(() => {
+        this.pendingCommands.delete(requestId);
+        reject(new Error(`Command timeout after ${timeoutMs}ms`));
+      }, timeoutMs);
+
+      // Guardar promise resolvers
+      this.pendingCommands.set(requestId, { resolve, reject, timeout });
+
+      // Publicar comando
+      const commandTopic = MQTT_TOPICS.DEVICE.command(deviceUuid, componentId);
+      this.client!.publish(
+        commandTopic,
+        JSON.stringify(commandMessage),
+        { qos: 1 },
+        (err) => {
+          if (err) {
+            clearTimeout(timeout);
+            this.pendingCommands.delete(requestId);
+            reject(new Error(`Failed to publish command: ${err.message}`));
+          } else {
+            this.loggingService.debug(
+              `Published command to ${commandTopic} (requestId: ${requestId})`,
+              context,
+            );
+          }
+        },
+      );
+    });
+  }
+
+  /**
+   * Publica configuración completa de periféricos a un dispositivo
+   * Retorna Promise que se resuelve cuando llega feedback de Arduino
+   */
+  public async publishConfig(
+    deviceUuid: string,
+    config: { peripherals: Array<Record<string, unknown>> },
+    timeoutMs: number = 5000,
+  ): Promise<ConfigFeedbackMessage> {
+    const context = 'MqttService.publishConfig';
+
+    if (!this.client || !this.isConnected) {
+      throw new Error('MQTT client not connected');
+    }
+
+    // Validar dispositivo online
+    const device = await this.deviceService.getDevice(deviceUuid);
+    if (!device || device.status !== 'online') {
+      throw new Error(`Device ${deviceUuid} is not online`);
+    }
+
+    return new Promise<ConfigFeedbackMessage>((resolve, reject) => {
+      // Verificar si ya hay una config pendiente para este dispositivo
+      const existing = this.pendingConfigs.get(deviceUuid);
+      if (existing) {
+        clearTimeout(existing.timeout);
+        existing.reject(
+          new Error('New config request cancelled previous pending config'),
+        );
+      }
+
+      // Suscribirse a feedback si no está suscrito
+      this.subscribeToConfigFeedback(deviceUuid);
+
+      // Timeout
+      const timeout = setTimeout(() => {
+        this.pendingConfigs.delete(deviceUuid);
+        reject(new Error(`Config timeout after ${timeoutMs}ms`));
+      }, timeoutMs);
+
+      // Guardar promise resolvers
+      this.pendingConfigs.set(deviceUuid, { resolve, reject, timeout });
+      this.loggingService.log(
+        `Added pending config for ${deviceUuid}, total pending: ${this.pendingConfigs.size}`,
+        context,
+      );
+
+      // Publicar config
+      const configTopic = MQTT_TOPICS.DEVICE.config(deviceUuid);
+      const message = JSON.stringify(config);
+
+      this.client!.publish(configTopic, message, { qos: 1 }, (err) => {
+        if (err) {
+          clearTimeout(timeout);
+          this.pendingConfigs.delete(deviceUuid);
+          reject(new Error(`Failed to publish config: ${err.message}`));
+        } else {
+          this.loggingService.log(
+            `Published config to ${configTopic}`,
+            context,
+          );
+        }
+      });
+    });
+  }
+
+  /**
+   * Suscribe a feedback topics de comandos para un dispositivo
+   */
+  private subscribeToCommandFeedback(uuid: string): void {
+    const context = 'MqttService.subscribeToCommandFeedback';
+
+    // Si ya está suscrito, no hacer nada
+    if (this.subscribedCommandFeedbackDevices.has(uuid)) {
+      return;
+    }
+
+    if (!this.client || !this.isConnected) {
+      this.loggingService.warn(
+        `Cannot subscribe to command feedback for ${uuid}: MQTT client not connected`,
+        context,
+      );
+      return;
+    }
+
+    const feedbackPattern = MQTT_TOPICS.DEVICE.commandFeedbackPattern(uuid);
+    this.client.subscribe(feedbackPattern, { qos: 1 }, (err) => {
+      if (err) {
+        this.loggingService.error(
+          `Failed to subscribe to ${feedbackPattern}`,
+          err.stack,
+          context,
+        );
+      } else {
+        this.subscribedCommandFeedbackDevices.add(uuid);
+        this.loggingService.log(
+          `Subscribed to command feedback pattern: ${feedbackPattern}`,
+          context,
+        );
+      }
+    });
+  }
+
+  /**
+   * Registrar callback para config feedback
+   */
+  setOnConfigFeedbackCallback(
+    callback: (
+      message: ConfigFeedbackMessage,
+      deviceUuid: string,
+    ) => Promise<void> | void,
+  ): void {
+    this.onConfigFeedbackCallback = callback;
+  }
+
+  /**
+   * Suscribe a feedback topics de configuración para un dispositivo
+   */
+  private subscribeToConfigFeedback(uuid: string): void {
+    const context = 'MqttService.subscribeToConfigFeedback';
+
+    // Si ya está suscrito, no hacer nada
+    if (this.subscribedConfigFeedbackDevices.has(uuid)) {
+      return;
+    }
+
+    if (!this.client || !this.isConnected) {
+      this.loggingService.warn(
+        `Cannot subscribe to config feedback for ${uuid}: MQTT client not connected`,
+        context,
+      );
+      return;
+    }
+
+    const feedbackTopic = MQTT_TOPICS.DEVICE.configFeedback(uuid);
+    this.client.subscribe(feedbackTopic, { qos: 1 }, (err) => {
+      if (err) {
+        this.loggingService.error(
+          `Failed to subscribe to ${feedbackTopic}`,
+          err.stack,
+          context,
+        );
+      } else {
+        this.subscribedConfigFeedbackDevices.add(uuid);
+        this.loggingService.log(
+          `Subscribed to config feedback topic: ${feedbackTopic}`,
+          context,
+        );
+      }
+    });
+  }
+
+  /**
+   * Maneja feedback de configuración
+   */
+  private handleConfigFeedback(
+    message: ConfigFeedbackMessage,
+    deviceUuid: string,
+  ): void {
+    const context = 'MqttService.handleConfigFeedback';
+
+    // Ejecutar async sin bloquear
+    this.handleConfigFeedbackAsync(message, deviceUuid).catch((error) => {
+      this.loggingService.error(
+        `Error processing config feedback from device ${deviceUuid}`,
+        (error as Error).stack,
+        context,
+      );
+    });
+  }
+
+  private async handleConfigFeedbackAsync(
+    message: ConfigFeedbackMessage,
+    deviceUuid: string,
+  ): Promise<void> {
+    const context = 'MqttService.handleConfigFeedbackAsync';
+
+    try {
+      this.loggingService.log(
+        `Config feedback from device ${deviceUuid}: ${JSON.stringify(message)}`,
+        context,
+      );
+
+      // Resolver/rechazar Promise pendiente si existe
+      const pending = this.pendingConfigs.get(deviceUuid);
+      this.loggingService.log(
+        `Checking pending config for ${deviceUuid}: ${pending ? 'found' : 'not found'}`,
+        context,
+      );
+      if (pending) {
+        clearTimeout(pending.timeout);
+        this.pendingConfigs.delete(deviceUuid);
+
+        if (message.status === 'success') {
+          this.loggingService.log(
+            `Resolving config feedback Promise for device ${deviceUuid}`,
+            context,
+          );
+          pending.resolve(message);
+        } else {
+          this.loggingService.warn(
+            `Rejecting config feedback Promise for device ${deviceUuid}: ${message.message}`,
+            context,
+          );
+          pending.reject(
+            new Error(message.message || 'Configuration failed on Arduino'),
+          );
+        }
+      } else {
+        this.loggingService.warn(
+          `Config feedback received for ${deviceUuid} but no pending config found. Available pending configs: ${Array.from(this.pendingConfigs.keys()).join(', ')}`,
+          context,
+        );
+      }
+
+      // Llamar al callback si está registrado (para actualizar DB si es necesario)
+      if (this.onConfigFeedbackCallback) {
+        await this.onConfigFeedbackCallback(message, deviceUuid);
+      } else {
+        this.loggingService.debug(
+          'Config feedback received but no callback registered',
+          context,
+        );
+      }
+    } catch (error) {
+      this.loggingService.error(
+        `Error processing config feedback from device ${deviceUuid}`,
+        (error as Error).stack,
+        context,
+      );
+    }
+  }
+
+  /**
+   * Maneja feedback de comandos
+   */
+  private handleCommandFeedback(
+    message: CommandFeedbackMessage,
+    uuid: string,
+  ): void {
+    const context = 'MqttService.handleCommandFeedback';
+
+    const pending = this.pendingCommands.get(message.requestId);
+    if (!pending) {
+      this.loggingService.warn(
+        `Received command feedback with unknown requestId: ${message.requestId} from device ${uuid}`,
+        context,
+      );
+      return;
+    }
+
+    clearTimeout(pending.timeout);
+    this.pendingCommands.delete(message.requestId);
+
+    if (message.status === 'success') {
+      this.loggingService.debug(
+        `Command feedback success for requestId ${message.requestId} from device ${uuid}`,
+        context,
+      );
+      pending.resolve(message);
+    } else {
+      this.loggingService.warn(
+        `Command feedback error for requestId ${message.requestId} from device ${uuid}: ${message.message}`,
+        context,
+      );
+      pending.reject(new Error(message.message || 'Command execution failed'));
+    }
   }
 }

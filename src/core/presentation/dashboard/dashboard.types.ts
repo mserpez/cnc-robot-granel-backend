@@ -31,6 +31,13 @@ export type DashboardStatus = {
       status: string;
       lastSeen: Date | null;
       ip?: string;
+      peripherals?: Array<{
+        id: string;
+        componentId: string;
+        type: string;
+        config: Record<string, unknown>;
+        state: Record<string, unknown> | null;
+      }>;
     }>;
   };
 };
